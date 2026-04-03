@@ -45,5 +45,29 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+# Add $Dest to the user PATH if not already present.
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -notlike "*$Dest*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$userPath;$Dest", "User")
+    Write-Host "Added $Dest to user PATH"
+} else {
+    Write-Host "$Dest already in user PATH"
+}
+
+# Download and extract the workflow library.
+$wfAsset = $release.assets | Where-Object { $_.name -eq "workflow-library.zip" } | Select-Object -First 1
+if ($wfAsset) {
+    $wfZip = "$env:TEMP\workflow-library.zip"
+    $wfDest = Join-Path $Dest "workflows"
+    Write-Host "Downloading workflow library ..."
+    Invoke-WebRequest -Uri $wfAsset.browser_download_url -OutFile $wfZip
+    if (Test-Path $wfDest) { Remove-Item -Recurse -Force $wfDest }
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($wfZip, $wfDest)
+    Remove-Item $wfZip
+    Write-Host "Workflows extracted to $wfDest"
+} else {
+    Write-Host "No workflow-library.zip found in release $tag, skipping"
+}
+
 Write-Host ""
-Write-Host "OK — automata-agent $tag installed to $Dest"
+Write-Host "automata-agent $tag installed to $Dest"
