@@ -28,9 +28,19 @@ Write-Host "Downloading $($asset.name) ($tag) ..."
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
 
 Write-Host "Extracting to $Dest ..."
-if (Test-Path $Dest) { Remove-Item -Recurse -Force $Dest }
+New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 Add-Type -Assembly System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $Dest)
+$zipArchive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+foreach ($entry in $zipArchive.Entries) {
+    $destPath = Join-Path $Dest $entry.FullName
+    if ($entry.FullName.EndsWith('/')) {
+        New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+    } else {
+        New-Item -ItemType Directory -Force -Path (Split-Path $destPath) | Out-Null
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
+    }
+}
+$zipArchive.Dispose()
 Remove-Item $zip
 
 Write-Host "Running self-test ..."

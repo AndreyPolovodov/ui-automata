@@ -1,0 +1,1694 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkflowFile",
+  "description": "A workflow script: ordered phases that automate a sequence of UI interactions.\n\n```\nlet yaml = r#\"\nname: my_workflow\nparams:\n  - name: text\n    default: \"Hello World\"\ndefaults:\n  timeout: 5s\nlaunch:\n  exe: notepad.exe\n  timeout: 15s\nanchors:\n  notepad: { type: Root, selector: \"[name~=Notepad]\" }\n  editor:  { type: Stable, parent: notepad, selector: \">> [role=edit][name='Text Editor']\" }\nrecovery_handlers:\n  my_handler:\n    trigger: { type: DialogPresent, scope: notepad }\n    actions: [{ type: ClickForegroundButton, name: OK }]\n    resume: retry_step\nphases:\n  - name: do_something\n    mount: [notepad, editor]\n    unmount: [editor]\n    recovery:\n      handlers: [my_handler]\n    steps:\n      - intent: click OK\n        action: { type: Click, scope: notepad, selector: \">> [role=button][name=OK]\" }\n        expect: { type: DialogAbsent, scope: notepad }\n\"#;\nlet _: ui_automata::yaml::WorkflowFile = serde_yaml::from_str(yaml).unwrap();\n```",
+  "type": "object",
+  "properties": {
+    "anchors": {
+      "description": "Named anchor definitions. An anchor is a named, cached handle to a live UI element.\nAnchors are activated per-phase via `mount:` and referenced by name as `scope` in\nactions and conditions. Each anchor declares a `type` (root/stable/ephemeral),\na `selector` to find the element, and optional `process`/`pin_launch` filters.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/YamlAnchor"
+      }
+    },
+    "defaults": {
+      "description": "Default timeout and retry policy applied to every step that does not set its own.",
+      "$ref": "#/$defs/Defaults"
+    },
+    "description": {
+      "description": "Human-readable description of what this workflow does.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "launch": {
+      "description": "Optional application to launch before running phases. The executor waits for a window\nbelonging to the launched PID to appear before proceeding.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LaunchConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "name": {
+      "description": "Unique workflow identifier, used in logs and progress events.",
+      "type": "string"
+    },
+    "outputs": {
+      "description": "Keys that this workflow returns to its parent when used as a subflow.\n\nWhen present, only `Extract` actions whose `key` is listed here propagate their\nvalue to the parent workflow; all other extracted keys are workflow-local and are\ndiscarded when the subflow returns. When absent the old behaviour is preserved:\nevery extracted value is returned (equivalent to listing all keys).\n\n```yaml\noutputs:\n  - name: saved_file\n    description: The final output CSV file\n  - name: export_path\n```",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/OutputDef"
+      }
+    },
+    "params": {
+      "description": "Declared parameters. Before deserialization, every `{param.<name>}` token in the\nraw YAML is replaced with the corresponding runtime value. This substitution applies\nto selectors, intent strings, text fields, and any other string value. Example: a\nparam named `folder` lets you write `[role=list item][name={param.folder}]` in a\nselector. Pass values via CLI (`--param folder=Downloads`) or the RunWorkflow `params` map.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ParamDef"
+      }
+    },
+    "phases": {
+      "description": "Ordered list of phases. Phases run sequentially; the first failure stops the workflow.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/YamlPhase"
+      }
+    },
+    "recovery_handlers": {
+      "description": "Named recovery handler definitions. A handler fires when a step times out and the\nhandler's `trigger` condition is true. Phases opt in via their `recovery: handlers:` list.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/YamlRecoveryHandler"
+      }
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "$defs": {
+    "Action": {
+      "oneOf": [
+        {
+          "description": "Left-click the centre of the element found by `selector` under `scope`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Click"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Double-click the centre of the element found by `selector` under `scope`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "DoubleClick"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Move the mouse cursor to the centre of the element without clicking.\nUseful for triggering hover menus or tooltips.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Hover"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Scroll ancestor containers until the element is within their visible\nviewport. Hovers each scrollable ancestor and sends wheel events,\nstopping as soon as the element's bounding box is fully visible or\nit stops moving (meaning the container doesn't scroll further).",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ScrollIntoView"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Click at a fractional position within the element's bounding box.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ClickType"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ClickAt"
+            },
+            "x_pct": {
+              "type": "number",
+              "format": "double"
+            },
+            "y_pct": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "x_pct",
+            "y_pct",
+            "kind"
+          ]
+        },
+        {
+          "description": "Type `text` into the element found by `selector` under `scope`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "TypeText"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "text"
+          ]
+        },
+        {
+          "description": "Send a key expression (e.g. `\"{ENTER}\"`, `\"{TAB}\"`) to the element.",
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "PressKey"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "key"
+          ]
+        },
+        {
+          "description": "Give keyboard focus to the element found by `selector` under `scope`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Focus"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Activate an element via UIA `IInvokePattern::Invoke()`.\n\nUnlike `Click`, `Invoke` does not require a valid bounding rect, so it\nworks on elements that are scrolled out of view (bounds `(0,0,1,1)`).\nFalls back to `Click` when the element does not support `InvokePattern`.\nPrefer this over `Click` + `ScrollIntoView` for items in WinUI/UWP\nscrollable lists where mouse-wheel scrolling causes elastic snap-back.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Invoke"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Bring the window for `scope` to the foreground and restore it if minimized.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ActivateWindow"
+            }
+          },
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "Minimize the window for `scope`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "MinimizeWindow"
+            }
+          },
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "Close the window for `scope` via its close button (sends WM_CLOSE).",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "CloseWindow"
+            }
+          },
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "Set the value of an edit / combo-box directly via IValuePattern.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "SetValue"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "value"
+          ]
+        },
+        {
+          "description": "Find the first dialog child of `scope` and close it.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "DismissDialog"
+            }
+          },
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "Click a button named `name` inside the current foreground window.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ClickForegroundButton"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ]
+        },
+        {
+          "description": "Click any element named `name` in the foreground window tree.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ClickForeground"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ]
+        },
+        {
+          "description": "Do nothing. Used as a placeholder action when a step only waits.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "NoOp"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Pause for the given duration before the expect condition is evaluated.\nUseful after `Hover` to wait for a tooltip to appear before the next step.",
+          "type": "object",
+          "properties": {
+            "duration": {
+              "description": "Duration string, e.g. \"5s\", \"300ms\", \"2m\", \"1h\"",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Sleep"
+            }
+          },
+          "required": [
+            "type",
+            "duration"
+          ]
+        },
+        {
+          "description": "Write all values stored under `key` in the workflow output buffer to a\nfile. Each value is written as one CSV-quoted line. The file is created\nor truncated. `path` supports `{output.*}` substitution.",
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "WriteOutput"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "path"
+          ]
+        },
+        {
+          "description": "Read text from one or more elements and store the values in the workflow\noutput buffer under `key`. The value is accessible via `{output.<key>}`\nsubstitution in subsequent steps.\n\nExtracts a text value from a matched element and stores it under `key`.\nWhether the value is propagated to the parent workflow is controlled by\nthe workflow's `outputs` declaration (set at load time, not in YAML).",
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "description": "Which text property to read from each matched element.",
+              "$ref": "#/$defs/ExtractAttribute"
+            },
+            "key": {
+              "description": "Output key. Accessible as `{output.<key>}` in later steps.",
+              "type": "string"
+            },
+            "multiple": {
+              "description": "If true, extract all matching elements. If false (default), extract only the first match.",
+              "type": "boolean",
+              "default": false
+            },
+            "scope": {
+              "description": "Anchor name that provides the search root.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path. Matches the first element unless `multiple` is true.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Extract"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "Evaluate a simple expression and store the result under `key`.\n\nThe expression language supports arithmetic (`+`, `-`, `*`, `/`, `%`),\ncomparison operators (`==`, `<`, `<=`, `>`, `>=`), logical operators\n(`&&`, `||`, both requiring `Bool` operands), parenthesised grouping,\nsingle-quoted string literals, numeric literals, variable references\n(`local.key` / bare identifier for locals, `param.key` for immutable\nworkflow params, `output.key` for the output buffer), and built-in\nfunctions (`split_lines`, `round`, `floor`, `ceil`, `min`, `max`,\n`trim`, `len`).\n\nThe result is always stored as a **local variable** (overwrite semantics).\nBare identifiers resolve from locals first, falling back to the output buffer.",
+          "type": "object",
+          "properties": {
+            "expr": {
+              "description": "Expression to evaluate.",
+              "type": "string"
+            },
+            "key": {
+              "description": "Key under which the result is stored in local variables.",
+              "type": "string"
+            },
+            "output": {
+              "description": "If set, also appends the result to the output buffer under this key.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "Eval"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "expr"
+          ]
+        },
+        {
+          "description": "Spawn an external process and wait for it to exit.\nFails if the exit code is non-zero.\n`{output.*}` tokens in `command` and `args` are substituted before execution.",
+          "type": "object",
+          "properties": {
+            "args": {
+              "description": "Arguments to pass to the process.",
+              "type": "array",
+              "default": [],
+              "items": {
+                "type": "string"
+              }
+            },
+            "command": {
+              "description": "Executable path or command name (resolved via PATH).",
+              "type": "string"
+            },
+            "key": {
+              "description": "If set, stdout is captured and each line stored in the output buffer under this key.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "Exec"
+            }
+          },
+          "required": [
+            "type",
+            "command"
+          ]
+        },
+        {
+          "description": "Move a file from `source` to `destination`.\nFails if the destination already exists.\nCreates the destination directory if it does not exist.\n`{output.*}` tokens in both fields are substituted before execution.",
+          "type": "object",
+          "properties": {
+            "destination": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "MoveFile"
+            }
+          },
+          "required": [
+            "type",
+            "source",
+            "destination"
+          ]
+        },
+        {
+          "description": "Navigate the browser tab anchored to `scope` to `url`.\nPolls `document.readyState` until `\"complete\"` before reporting success.\n`scope` must name a `Tab` anchor.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "BrowserNavigate"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "url"
+          ]
+        },
+        {
+          "description": "Evaluate a JavaScript expression in the browser tab anchored to `scope`.\nStores the string result in the output buffer under `key`.\n`scope` must name a `Tab` anchor.",
+          "type": "object",
+          "properties": {
+            "expr": {
+              "type": "string"
+            },
+            "key": {
+              "description": "Output key to store the result. If omitted the result is discarded.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "BrowserEval"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "expr"
+          ]
+        }
+      ]
+    },
+    "AnchorKind": {
+      "description": "Lifetime tier of an anchor, controlling how it is resolved and what happens when it goes stale.",
+      "oneOf": [
+        {
+          "description": "Resolved against desktop application windows. A stale root anchor is a fatal error.",
+          "type": "string",
+          "const": "Root"
+        },
+        {
+          "description": "A top-level window that can appear and disappear during the workflow.\nResolved lazily on first use; going stale is not fatal. Use for transient\nwindows such as progress dialogs that may or may not be present.",
+          "type": "string",
+          "const": "Session"
+        },
+        {
+          "description": "Resolved within a parent anchor's subtree. Re-queried automatically when the cached\nhandle goes stale (e.g. after a page navigation or panel reload).",
+          "type": "string",
+          "const": "Stable"
+        },
+        {
+          "description": "Stored at runtime via a `Capture` action. Released when the phase that created it exits.",
+          "type": "string",
+          "const": "Ephemeral"
+        },
+        {
+          "description": "A CDP browser session (Edge). Calls `browser.ensure()` on mount; stores the\nEdge window as a Root UIA anchor so UIA actions can target it normally.",
+          "type": "string",
+          "const": "Browser"
+        },
+        {
+          "description": "A specific browser tab. `parent` must name a `Browser` anchor.\n`blank: true` — open a new blank tab (or reuse an existing New Tab page);\nnavigate via a `BrowserNavigate` action. Closed on unmount.\nOmit `blank` — attach to an existing tab matched by `selector`. Left open on unmount.",
+          "type": "string",
+          "const": "Tab"
+        }
+      ]
+    },
+    "ClickType": {
+      "description": "Type of mouse click to perform.",
+      "type": "string",
+      "enum": [
+        "left",
+        "double",
+        "triple",
+        "right",
+        "middle"
+      ]
+    },
+    "Condition": {
+      "oneOf": [
+        {
+          "description": "True when the selector matches at least one live element under the scope anchor.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ElementFound"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "True when the matched element is not greyed out (UIA IsEnabled).",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ElementEnabled"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "True when the matched element is visible on screen (UIA IsOffscreen=false).",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ElementVisible"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "True when the matched element has at least one child element.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ElementHasChildren"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "True when the matched element's text value satisfies the pattern.",
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "$ref": "#/$defs/TextMatch"
+            },
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ElementHasText"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "pattern"
+          ]
+        },
+        {
+          "description": "True when any open application window matches all specified attributes. Requires at least one of: exact, contains, starts_with, automation_id, pid.",
+          "type": "object",
+          "properties": {
+            "automation_id": {
+              "description": "UIA AutomationId / AXIdentifier must match exactly.",
+              "type": "string"
+            },
+            "contains": {
+              "description": "Window title must contain this substring.",
+              "type": "string"
+            },
+            "exact": {
+              "description": "Window title must match exactly.",
+              "type": "string"
+            },
+            "pid": {
+              "description": "Process ID to match exactly.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "process": {
+              "description": "Process name without .exe (case-insensitive).",
+              "type": "string"
+            },
+            "starts_with": {
+              "description": "Window title must start with this string.",
+              "type": "string"
+            },
+            "type": {
+              "const": "WindowWithAttribute"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "True when any application window belongs to a process whose name (without .exe) matches, case-insensitive.",
+          "type": "object",
+          "properties": {
+            "process": {
+              "description": "Process name without .exe (e.g. \"notepad\").",
+              "type": "string"
+            },
+            "type": {
+              "const": "ProcessRunning"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "process"
+          ]
+        },
+        {
+          "description": "True when the anchor's window is in the given state. Use after ActivateWindow (active) or to confirm a window is not minimized (visible).",
+          "type": "object",
+          "properties": {
+            "anchor": {
+              "description": "Name of the anchor whose window is tracked.",
+              "type": "string"
+            },
+            "state": {
+              "description": "active: window is the OS foreground window. visible: window is visible on screen (not minimized or hidden).",
+              "type": "string",
+              "enum": [
+                "active",
+                "visible"
+              ]
+            },
+            "type": {
+              "const": "WindowWithState"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "anchor",
+            "state"
+          ]
+        },
+        {
+          "description": "True when the anchor's window is no longer present. If the anchor was resolved with a PID, checks at process level; otherwise attempts re-resolution and treats failure as closed.",
+          "type": "object",
+          "properties": {
+            "anchor": {
+              "description": "Name of the anchor whose window is tracked.",
+              "type": "string"
+            },
+            "type": {
+              "const": "WindowClosed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "anchor"
+          ]
+        },
+        {
+          "description": "True when a direct child of the scope element has control_type=dialog.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "type": {
+              "const": "DialogPresent"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "True when no direct child of the scope element has control_type=dialog.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "type": {
+              "const": "DialogAbsent"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "True when the OS foreground window is a dialog belonging to the same process as scope. Optionally also checks the dialog title.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "title": {
+              "$ref": "#/$defs/TitleMatch"
+            },
+            "type": {
+              "const": "ForegroundIsDialog"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "True when the most recent Exec action exited with code 0.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ExecSucceeded"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Evaluates a boolean expression against the current outputs, locals, and params. The expression must return a Bool (use a comparison operator), e.g. \"output.count != '0'\".",
+          "type": "object",
+          "properties": {
+            "expr": {
+              "description": "Boolean expression to evaluate.",
+              "type": "string"
+            },
+            "type": {
+              "const": "EvalCondition"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "expr"
+          ]
+        },
+        {
+          "description": "Always evaluates to true immediately. Use as `expect` on steps where success is guaranteed by the action (e.g. Capture, NoOp).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "Always"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Short-circuit AND: true when every sub-condition is true.",
+          "type": "object",
+          "properties": {
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Condition"
+              }
+            },
+            "type": {
+              "const": "AllOf"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "conditions"
+          ]
+        },
+        {
+          "description": "Short-circuit OR: true when at least one sub-condition is true.",
+          "type": "object",
+          "properties": {
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Condition"
+              }
+            },
+            "type": {
+              "const": "AnyOf"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "conditions"
+          ]
+        },
+        {
+          "description": "Negation: true when the inner condition is false.",
+          "type": "object",
+          "properties": {
+            "condition": {
+              "$ref": "#/$defs/Condition"
+            },
+            "type": {
+              "const": "Not"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "condition"
+          ]
+        }
+      ]
+    },
+    "Defaults": {
+      "description": "Step defaults applied when a step does not specify its own timeout or retry policy.",
+      "type": "object",
+      "properties": {
+        "action_snapshot": {
+          "description": "Whether to snapshot the DOM after each action for diffing.",
+          "type": "boolean",
+          "default": false
+        },
+        "recovery": {
+          "description": "Recovery defaults applied to all phases.",
+          "$ref": "#/$defs/DefaultsRecovery"
+        },
+        "retry": {
+          "description": "Retry policy applied when a step times out and no recovery handler fires.\nDefault: `fixed: { count: 1, delay: 1s }`.",
+          "$ref": "#/$defs/RetryPolicy"
+        },
+        "timeout": {
+          "description": "Maximum time to wait for a step's `expect` condition to become true.\nAccepts duration strings such as `\"5s\"`, `\"300ms\"`, `\"2m\"`. Default: 10s.",
+          "type": "string",
+          "default": null
+        }
+      }
+    },
+    "DefaultsRecovery": {
+      "description": "Workflow-level recovery defaults.",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "description": "Maximum number of times any recovery handler may fire per phase. Default: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      }
+    },
+    "ExtractAttribute": {
+      "description": "Which text property to read from each matched element during an `Extract` action.",
+      "oneOf": [
+        {
+          "description": "The UIA Name property — the element's accessible label or caption.",
+          "type": "string",
+          "const": "name"
+        },
+        {
+          "description": "The ValuePattern text, falling back to the Name property.\nUse for edit fields and other value-bearing controls.",
+          "type": "string",
+          "const": "text"
+        },
+        {
+          "description": "Direct children's names joined by newlines, excluding the element's own name.\nUseful for composite controls like list items or tooltips where the\nmeaningful text lives in child elements.",
+          "type": "string",
+          "const": "inner_text"
+        }
+      ]
+    },
+    "FlowControl": {
+      "description": "Condition-and-jump node: evaluates a condition and, if true, jumps to a\nnamed phase. If false, falls through to the next phase in order.",
+      "type": "object",
+      "properties": {
+        "condition": {
+          "description": "Condition to evaluate.",
+          "$ref": "#/$defs/Condition"
+        },
+        "go_to": {
+          "description": "Name of the phase to jump to when the condition is true.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "condition",
+        "go_to"
+      ]
+    },
+    "LaunchConfig": {
+      "description": "Launches an application before phases run. Exactly one of `exe` or `app` must be set.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "Store / URI / UWP app to launch. Accepts:\n- URI scheme name (without colon): `\"ms-windows-store\"`, `\"ms-settings\"`\n- Full URI: `\"ms-windows-store:\"`, `\"ms-settings:display\"`\n- UWP AppID: `\"Microsoft.WindowsStore_8wekyb3d8bbwe!App\"`\n- Start Menu AppID: `\"{GUID}\\\\path\\\\to\\\\App.exe\"`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exe": {
+          "description": "Executable name or path to launch, e.g. `\"notepad.exe\"`. Resolved via PATH.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout": {
+          "description": "How long to wait for the launched application's window to appear.\nAccepts duration strings such as `\"15s\"`. Default: 15s.",
+          "type": "string",
+          "default": null
+        },
+        "wait": {
+          "description": "Window identification strategy. Controls which window the launch anchor locks to.\n\n- `match_any` *(default)*: wait until the anchor's selector resolves against any\n  window of the process. Suitable for apps that reuse an existing process (browsers).\n- `new_pid`: wait for a window owned by the exact PID returned by the OS launcher.\n  Use for normal multi-instance apps (Notepad, Word, Excel).\n- `new_window`: snapshot existing windows before launch; wait for a new window to\n  appear in the process. Use for single-instance apps (Explorer, VS Code) where the\n  launched process hands off to an existing one and exits immediately.",
+          "$ref": "#/$defs/LaunchWait"
+        },
+        "wait_for": {
+          "description": "Name of a declared anchor to wait for instead of using `wait:`.\nSnapshots existing windows before launch, then polls until a new window\nmatching the anchor's `process:` filter appears. Use when the launched\nexe hands off to a different process (e.g. `control.exe` → `explorer`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "LaunchWait": {
+      "description": "How to identify the launched application's window after calling `launch:`.",
+      "oneOf": [
+        {
+          "description": "Wait until the anchor's selector resolves against any window of the process.\nUse for apps that reuse an existing process (browsers opening a new tab).",
+          "type": "string",
+          "const": "match_any"
+        },
+        {
+          "description": "Wait for a window owned by the exact PID returned by the OS launcher.\nUse for normal multi-instance apps (Notepad, Word).",
+          "type": "string",
+          "const": "new_pid"
+        },
+        {
+          "description": "Snapshot existing windows before launch; wait for a new HWND to appear in\nthe process. Use for single-instance apps (Explorer, VS Code) where the\nlaunched process hands off to an existing one and exits.",
+          "type": "string",
+          "const": "new_window"
+        }
+      ]
+    },
+    "OnFailure": {
+      "description": "Controls executor behaviour when a step's `expect` condition times out (and any\n`fallback` action also fails to satisfy it).",
+      "oneOf": [
+        {
+          "description": "Propagate the error; abort the current phase. This is the default.",
+          "type": "string",
+          "const": "abort"
+        },
+        {
+          "description": "Log the failure, then continue to the next step as if the step had succeeded.",
+          "type": "string",
+          "const": "continue"
+        }
+      ]
+    },
+    "OnSuccess": {
+      "description": "Controls executor behaviour immediately after a step succeeds.",
+      "oneOf": [
+        {
+          "description": "Proceed to the next step. This is the default.",
+          "type": "string",
+          "const": "continue"
+        },
+        {
+          "description": "Stop executing steps in the current phase immediately (not an error).",
+          "type": "string",
+          "const": "return_phase"
+        }
+      ]
+    },
+    "OutputDef": {
+      "description": "A declared output key. When a workflow is used as a subflow, only keys listed here\nare returned to the parent; all other `Extract` keys remain workflow-local.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "Human-readable description of what this output contains.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "description": "Output key name. Must match the `key` field of an `Extract` action.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "ParamDef": {
+      "description": "A declared script parameter. Passed at runtime via CLI (`--param name=value`) or the\nRunWorkflow command's `params` map. The value is substituted into every YAML string in\nthe workflow wherever `{param.<name>}` appears.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Default value. Omit to make the parameter required.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "Human-readable description of this parameter.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "description": "Parameter name. Use `{param.<name>}` anywhere in the workflow YAML to substitute\nthis value — selectors, intent strings, text fields, etc.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "ResumeStrategy": {
+      "description": "What the executor does after a recovery handler fires.",
+      "oneOf": [
+        {
+          "description": "Re-execute the failing step from scratch.",
+          "type": "string",
+          "const": "retry_step"
+        },
+        {
+          "description": "Consider the step already done and advance to the next one.",
+          "type": "string",
+          "const": "skip_step"
+        },
+        {
+          "description": "Treat the step as failed — propagate the error.",
+          "type": "string",
+          "const": "fail"
+        }
+      ]
+    },
+    "RetryPolicy": {
+      "oneOf": [
+        {
+          "description": "No retries. The step fails immediately when the expect condition times out.",
+          "const": "none"
+        },
+        {
+          "description": "Retry indefinitely as long as a recovery handler fires on each timeout. Fails when a timeout occurs with no matching handler.",
+          "const": "with_recovery"
+        },
+        {
+          "description": "Retry a fixed number of times with a constant delay between attempts.",
+          "type": "object",
+          "properties": {
+            "fixed": {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "description": "Number of additional attempts after the first failure.",
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "delay": {
+                  "description": "Wait between retries, e.g. \"300ms\" or \"2s\".",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "count",
+                "delay"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "fixed"
+          ]
+        }
+      ]
+    },
+    "Step": {
+      "description": "A single automation intent: execute an action, then wait for an expected UI state.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "The UI action to perform: click, type text, press a key, close a window, etc.",
+          "$ref": "#/$defs/Action"
+        },
+        "expect": {
+          "description": "Condition that must become true after the action for the step to succeed.\nPolled every 100 ms until satisfied or the timeout elapses.",
+          "$ref": "#/$defs/Condition"
+        },
+        "fallback": {
+          "description": "Optional fallback action run when `expect` times out on the primary action.\nAfter the fallback runs, `expect` is re-polled once with a fresh timeout.\nIf it succeeds, the step succeeds; otherwise `on_failure` decides what happens.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "intent": {
+          "description": "Human-readable label shown in logs, e.g. `\"click the Save button\"`.",
+          "type": "string"
+        },
+        "on_failure": {
+          "description": "What to do when this step fails (expect condition times out, or fallback also fails).\nDefault: `abort` — propagate the error and stop the phase.",
+          "$ref": "#/$defs/OnFailure"
+        },
+        "on_success": {
+          "description": "What to do immediately after this step succeeds.\nDefault: `continue` — proceed to the next step.",
+          "$ref": "#/$defs/OnSuccess"
+        },
+        "precondition": {
+          "description": "Optional guard evaluated before the action. If false, the step is skipped (not an error).\nUseful for conditional steps such as \"dismiss dialog if it appeared\".",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry": {
+          "description": "Retry policy on timeout. Overrides the workflow default.\nDefault: `none` — falls back to the workflow-level default.",
+          "$ref": "#/$defs/RetryPolicy"
+        },
+        "timeout": {
+          "description": "Maximum time to wait for `expect` to become true. Overrides the workflow default.\nAccepts duration strings such as `\"5s\"`, `\"300ms\"`, `\"2m\"`.",
+          "type": "string",
+          "default": null
+        }
+      },
+      "required": [
+        "intent",
+        "action",
+        "expect"
+      ]
+    },
+    "TextMatch": {
+      "description": "Matches element text. Exactly one field should be set.",
+      "type": "object",
+      "properties": {
+        "contains": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "non_empty": {
+          "type": "boolean",
+          "default": false
+        },
+        "regex": {
+          "description": "Fancy-regex pattern (supports backreferences, lookahead, etc.).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "starts_with": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TitleMatch": {
+      "description": "Matches a window title. Exactly one field should be set.",
+      "type": "object",
+      "properties": {
+        "contains": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exact": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "starts_with": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "YamlActionPhase": {
+      "description": "An action node: the standard phase with steps and lifecycle hooks.",
+      "type": "object",
+      "properties": {
+        "finally": {
+          "description": "When true, this phase always runs regardless of whether earlier phases failed.\nUse for cleanup: closing dialogs, restoring focus, resetting state.\nFinally phase errors are logged but do not override the original workflow error.",
+          "type": "boolean",
+          "default": false
+        },
+        "mount": {
+          "description": "Anchor names to activate at the start of this phase. Root anchors are resolved\nimmediately; stable anchors are resolved on first use.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "description": "Phase name used in logs and progress events.",
+          "type": "string"
+        },
+        "precondition": {
+          "description": "Evaluated before mounting anchors. If false, the phase is silently skipped\nand the workflow continues — not an error.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recovery": {
+          "description": "Recovery configuration: which named handlers to enable for this phase's steps.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/YamlPhaseRecovery"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "description": "Ordered list of steps to execute. The first step failure stops the phase.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        },
+        "unmount": {
+          "description": "Anchor names to release at the end of this phase, even if steps fail.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "steps"
+      ]
+    },
+    "YamlAnchor": {
+      "description": "Declaration of a named UI element handle used as a `scope` in actions and conditions.",
+      "type": "object",
+      "properties": {
+        "parent": {
+          "description": "For `Stable`, `Ephemeral`, and `Tab` anchors: name of the parent anchor.\nFor `Tab` anchors the parent must be a `Browser` anchor.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pid": {
+          "description": "Pin this anchor to a specific process ID. Takes precedence over `process`.\nUseful when the caller knows the exact PID (e.g. from `list_windows` or\nafter `open_application` returns a PID via a workflow param).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "process": {
+          "description": "Restrict resolution to windows belonging to a process with this name\n(case-insensitive, without `.exe`). Combine with `selector: \"*\"` to match\nany window of the process regardless of title.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "selector": {
+          "description": "CSS-like selector path to find this element.\nRoot/Session/Stable/Ephemeral anchors: required — matched against desktop windows or\nthe parent anchor's subtree.\nBrowser anchors: omit (not used).\nTab anchors (attach mode): match against TabInfo fields\n(`title`, `url`). Example: `\"[title~='Git for Windows'][url~='github.com']\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "description": "Lifetime tier that controls how the handle is resolved and cached.",
+          "$ref": "#/$defs/AnchorKind"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "YamlFlowControlPhase": {
+      "description": "A decision node: no steps, no mounts — just a branch.",
+      "type": "object",
+      "properties": {
+        "flow_control": {
+          "$ref": "#/$defs/FlowControl"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "flow_control"
+      ]
+    },
+    "YamlPhase": {
+      "description": "A phase is a decision node (`flow_control`), a subflow delegate (`subflow`),\nor an action node (`steps`).",
+      "anyOf": [
+        {
+          "description": "Decision node — tried first because it requires `flow_control` key.",
+          "$ref": "#/$defs/YamlFlowControlPhase"
+        },
+        {
+          "description": "Subflow delegate — requires `subflow` key.",
+          "$ref": "#/$defs/YamlSubflowPhase"
+        },
+        {
+          "description": "Action node — fallback, requires `steps` key.",
+          "$ref": "#/$defs/YamlActionPhase"
+        }
+      ]
+    },
+    "YamlPhaseRecovery": {
+      "description": "Phase-level recovery configuration.",
+      "type": "object",
+      "properties": {
+        "handlers": {
+          "description": "Names from the top-level `recovery_handlers` map to enable for this phase's steps.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "limit": {
+          "description": "Maximum number of times any recovery handler may fire across all steps in this phase.\nOverrides `defaults.recovery.limit`. Default: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      }
+    },
+    "YamlRecoveryHandler": {
+      "description": "A handler that fires when a step times out in a known bad state and executes\ncorrective actions before the step is retried, skipped, or failed.",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "description": "Actions to run when the trigger fires, e.g. dismiss an unexpected dialog.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Action"
+          }
+        },
+        "resume": {
+          "description": "What the executor does after the recovery actions complete.",
+          "$ref": "#/$defs/ResumeStrategy"
+        },
+        "trigger": {
+          "description": "Condition checked after a step timeout. The handler fires when this is true.",
+          "$ref": "#/$defs/Condition"
+        }
+      },
+      "required": [
+        "trigger",
+        "actions",
+        "resume"
+      ]
+    },
+    "YamlSubflowPhase": {
+      "description": "A subflow phase: delegates to a child workflow YAML file.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Phase name used in logs and progress events.",
+          "type": "string"
+        },
+        "params": {
+          "description": "Parameter values to pass to the child workflow.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "subflow": {
+          "description": "Path to the child workflow YAML file, relative to this workflow's file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "subflow"
+      ]
+    }
+  }
+}
