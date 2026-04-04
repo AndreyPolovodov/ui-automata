@@ -1,0 +1,189 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: mastercam_simulator_save_operation
+description: |
+  Fast-forwards the Mastercam Simulator to the last operation, then saves
+  the Operation Info file to a desired directory.
+
+  What it does:
+    1. Clicks the "last operation" button to fast-forward
+    2. Clicks the "Move Info" tab to reveal the property grid
+    3. Waits until Move ID reads "N of N" (fully fast-forwarded)
+    4. Invokes the "Save Operation Info" button
+    5. Sets the save directory in the file dialog, extracts the filename, saves
+
+  Prerequisites: the Mastercam Simulator is open and ready.
+
+params:
+  - name: output_dir
+    description: Directory path to save the operation info file into.
+    default: "{env.USERPROFILE}\\Documents\\"
+
+outputs:
+  - name: saved_file
+    description: The filename (without path) that was saved.
+
+defaults:
+  timeout: 5s
+  action_snapshot: false
+
+# ── Anchors ────────────────────────────────────────────────────────────────────
+
+anchors:
+  simulator:
+    type: Root
+    selector: "[name~=Simulator]"
+    process: Mastercam
+
+  move_info_pane:
+    type: Ephemeral
+    parent: simulator
+    selector: ">> [role='tool window'][name='Move Info']"
+
+  save_dialog:
+    type: Ephemeral
+    parent: simulator
+    selector: ">> [role=dialog]"
+
+# ── Recovery handlers ──────────────────────────────────────────────────────────
+
+recovery_handlers:
+  dismiss_simulator_error:
+    trigger:
+      type: DialogPresent
+      scope: simulator
+    actions:
+      - type: Click
+        scope: simulator
+        selector: "> [role=dialog] > [role=button][name=OK]"
+    resume: retry_step
+
+  confirm_overwrite:
+    trigger:
+      type: ElementFound
+      scope: save_dialog
+      selector: "> [role=dialog][name='Save Operation Info']"
+    actions:
+      - type: Click
+        scope: save_dialog
+        selector: "> [role=dialog][name='Save Operation Info'] >> [role=button][name=Yes]"
+    resume: retry_step
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  # ── 1. Fast-forward to last operation ─────────────────────────────────────────
+  - name: fast_forward
+    mount: [simulator]
+    recovery:
+      handlers: [dismiss_simulator_error]
+    steps:
+      - intent: click the last-operation button (9th child of Performance's parent)
+        action:
+          type: Click
+          scope: simulator
+          selector: ">> [role=button][name=Performance]:parent > *:nth(9)"
+        on_failure: continue
+        expect:
+          type: ElementFound
+          scope: simulator
+          selector: ">> [role=button][name=Performance]"
+
+  # ── 2. Switch to Move Info tab ────────────────────────────────────────────────
+  - name: open_move_info
+    steps:
+      - intent: click the Move Info tab
+        action:
+          type: Click
+          scope: simulator
+          selector: ">> [role='tab item'][name='Move Info']"
+        expect:
+          type: ElementFound
+          scope: simulator
+          selector: ">> [role='tool window'][name='Move Info']"
+
+  # ── 3. Wait until Move ID shows "N of N" ──────────────────────────────────────
+  - name: wait_fast_forward
+    mount: [move_info_pane]
+    steps:
+      - intent: wait until Move ID value equals total (fast-forward complete)
+        action:
+          type: NoOp
+        timeout: 5s
+        retry:
+          fixed:
+            count: 120
+            delay: 500ms
+        expect:
+          type: ElementHasText
+          scope: move_info_pane
+          selector: ">> [role=edit][name=MoveId]"
+          pattern:
+            regex: "^(\\d+) of \\1$"
+
+  # ── 4. Invoke the Save Operation Info button ──────────────────────────────────
+  - name: save_operation_info
+    mount: [move_info_pane]
+    recovery:
+      handlers: [dismiss_simulator_error, confirm_overwrite]
+    steps:
+      - intent: invoke Save Operation Info button
+        action:
+          type: Invoke
+          scope: move_info_pane
+          selector: ">> [role=button][name='Save Operation Info']"
+        expect:
+          type: DialogPresent
+          scope: simulator
+
+  # ── 5. Handle the file save dialog ────────────────────────────────────────────
+  - name: save_file
+    mount: [save_dialog]
+    unmount: [save_dialog]
+    recovery:
+      handlers: [confirm_overwrite]
+    steps:
+      - intent: extract the default file name before saving
+        action:
+          type: Extract
+          key: saved_file
+          scope: save_dialog
+          selector: ">> [role='combo box'][name='File name:'] >> [role=edit]"
+          attribute: text
+        expect:
+          type: EvalCondition
+          expr: "output.saved_file != ''"
+
+      - intent: compute full save path
+        action:
+          type: Eval
+          key: full_path
+          expr: "param.output_dir + output.saved_file"
+        expect:
+          type: Always
+
+      - intent: set full path in file name field
+        action:
+          type: SetValue
+          scope: save_dialog
+          selector: ">> [role='combo box'][name='File name:'] >> [role=edit]"
+          value: "{output.full_path}"
+        expect:
+          type: ElementHasText
+          scope: save_dialog
+          selector: ">> [role='combo box'][name='File name:'] >> [role=edit]"
+          pattern:
+            contains: "{output.full_path}"
+
+      - intent: click Save
+        retry:
+          fixed:
+            count: 20
+            delay: 1s
+        action:
+          type: Click
+          scope: save_dialog
+          selector: ">> [role=button][name=Save]"
+        expect:
+          type: DialogAbsent
+          scope: simulator

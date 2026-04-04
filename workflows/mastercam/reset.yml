@@ -1,0 +1,220 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: mastercam_reset
+description: |
+  Resets Mastercam to a clean "Mastercam Design" state.
+  Assumes the application is already running.
+
+  What it does:
+    1. Mounts the main window (title contains "Mill" or "Design")
+    2. Minimizes the add-in (MainView) window if it is open
+    3. Closes the Simulator window if it is open (dismisses any dialogs first)
+    4. Dismisses any remaining dialogs on the main window
+    5. Clicks New in the Quick Access Toolbar if not already in "Mastercam Design"
+    6. Confirms the window title starts with "Mastercam Design"
+
+  Note: role strings (e.g. "tool bar", "window") reflect UIA control type names as
+  reported by ui-inspector. Adjust if the Mastercam build returns something
+  different.
+
+defaults:
+  timeout: 5s
+  action_snapshot: false
+
+# ── Anchors ────────────────────────────────────────────────────────────────────
+
+anchors:
+  mastercam:
+    type: Root
+    selector: "[name~=Mill|Design]"
+    process: Mastercam
+
+  # Separate top-level window launched by Mastercam — may not be present.
+  simulator:
+    type: Root
+    selector: "[name~=Simulator]"
+    process: Mastercam
+
+  # Quick Access Toolbar bar nested inside the ribbon panel.
+  quickaccess:
+    type: Stable
+    parent: mastercam
+    selector: "> [role='tool bar'][name=Mastercam] > [role='tool bar'][name='Quick Access Toolbar']"
+
+# ── Recovery handlers ──────────────────────────────────────────────────────────
+
+recovery_handlers:
+  # "Do you want to save changes?" / "Don't Save" variant — fires on any step timeout
+  # when a dialog is present. Clicks the "Don't Save" button (handles both U+0027 and
+  # U+2019 apostrophe variants) via a selector anchored to the mastercam scope.
+  dismiss_dont_save:
+    trigger:
+      type: DialogPresent
+      scope: mastercam
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: ">> [role=button][name^=Don][name$=Save]"
+    resume: retry_step
+
+  # Generic OK/Cancel dismissal for error or warning dialogs.
+  dismiss_ok:
+    trigger:
+      type: ForegroundIsDialog
+      scope: mastercam
+    actions:
+      - type: ClickForegroundButton
+        name: OK
+    resume: retry_step
+
+  # "Errors or Warnings" dialog appears as a direct child of the main window
+  # after some files load. Mastercam's UIA tree is complex so dismissing it
+  # during reset avoids stale dialogs blocking later phases.
+  dismiss_errors:
+    trigger:
+      type: ElementFound
+      scope: mastercam
+      selector: "> [role=dialog][name='Errors or Warnings']"
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: "> [role=dialog][name='Errors or Warnings'] >> [role=button][name=OK]"
+    resume: retry_step
+
+  # File open dialog: Clicks Cancel rather than relying on WM_CLOSE.
+  dismiss_file_open:
+    trigger:
+      type: ElementFound
+      scope: mastercam
+      selector: "> [role=dialog][name=Open]"
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: "> [role=dialog][name=Open] >> [role=button][name=Cancel]"
+    resume: retry_step
+
+  # Simulator dialog dismissal.
+  dismiss_simulator_ok:
+    trigger:
+      type: DialogPresent
+      scope: simulator
+    actions:
+      - type: ClickForegroundButton
+        name: OK
+    resume: retry_step
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  # ── 1. Required: mount the main window ───────────────────────────────────────
+  - name: mount_main
+    mount: [mastercam]
+    steps:
+      - intent: activate window in case it is minimized
+        action:
+          type: ActivateWindow
+          scope: mastercam
+        expect:
+          type: WindowWithState
+          anchor: mastercam
+          state: active
+
+  # ── 2. Dismiss errors ────────────────────────────────────────────────────────
+  # Skipped when the add-in window is not open.
+  - name: dismiss_errors
+    recovery:
+      handlers: [dismiss_errors, dismiss_ok]
+    steps:
+      - intent: dismiss errors if any
+        action:
+          type: NoOp
+        expect:
+          type: DialogAbsent
+          scope: mastercam
+
+  # ── 3. Optional: close the Simulator window ──────────────────────────────────
+  # Skipped when no Simulator window is open.
+  - name: close_simulator
+    precondition:
+      type: WindowWithAttribute
+      title:
+        contains: Simulator
+    mount: [simulator]
+    unmount: [simulator]
+    recovery:
+      handlers: [dismiss_simulator_ok]
+    steps:
+      - intent: activate simulator window
+        action:
+          type: ActivateWindow
+          scope: simulator
+        expect:
+          type: WindowWithState
+          anchor: simulator
+          state: active
+
+      - intent: dismiss any open dialog inside simulator
+        action:
+          type: DismissDialog
+          scope: simulator
+        on_failure: continue
+        expect:
+          type: DialogAbsent
+          scope: simulator
+
+      - intent: close the simulator window
+        action:
+          type: CloseWindow
+          scope: simulator
+        expect:
+          type: Not
+          condition:
+            type: WindowWithAttribute
+            title:
+              contains: Simulator
+
+  # ── 4. Dismiss any remaining dialogs on the main window ──────────────────────
+  - name: dismiss_main_dialogs
+    recovery:
+      handlers: [dismiss_file_open, dismiss_dont_save, dismiss_ok, dismiss_errors]
+    steps:
+      - intent: ensure no dialog is present on main window
+        action:
+          type: NoOp
+        expect:
+          type: DialogAbsent
+          scope: mastercam
+
+  # ── 5. Optional: click New if not already in Mastercam Design mode ───────────
+  # Skipped when the window title already starts with "Mastercam Design".
+  - name: new_file
+    precondition:
+      type: Not
+      condition:
+        type: WindowWithAttribute
+        title:
+          starts_with: "Mastercam Design"
+    mount: [quickaccess]
+    recovery:
+      handlers: [dismiss_dont_save, dismiss_ok]
+    steps:
+      - intent: click the New button in the Quick Access Toolbar
+        action:
+          type: Click
+          scope: quickaccess
+          selector: "> [role=button][name=New]"
+        expect:
+          type: WindowWithAttribute
+          title:
+            starts_with: "Mastercam Design"
+
+  # ── 6. Confirm ready ─────────────────────────────────────────────────────────
+  - name: confirm_ready
+    steps:
+      - intent: verify main window is in Mastercam Design mode
+        action:
+          type: NoOp
+        expect:
+          type: WindowWithAttribute
+          title:
+            starts_with: "Mastercam Design"

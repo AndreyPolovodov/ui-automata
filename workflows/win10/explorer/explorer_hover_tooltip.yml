@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: explorer_hover_tooltip
+description: |
+  Find the open File Explorer window and hover over the "File" tab button
+  in the ribbon command bar. Fails if Explorer is not running.
+
+anchors:
+  explorer:
+    type: Root
+    selector: "[role=window]"
+    process: explorer
+
+phases:
+  - name: hover_file_tab
+    mount: [explorer]
+    steps:
+      - intent: activate Explorer window
+        action:
+          type: ActivateWindow
+          scope: explorer
+        expect:
+          type: WindowWithState
+          anchor: explorer
+          state: active
+
+      - intent: hover over the File tab button
+        action:
+          type: Hover
+          scope: explorer
+          selector: ">> [role=button][name^=File]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role='tool tip']"
+
+      - intent: extract tooltip text
+        action:
+          type: Extract
+          key: tooltip
+          scope: explorer
+          selector: ">> [role='tool tip']"
+          attribute: inner_text
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=button][name^=File]"

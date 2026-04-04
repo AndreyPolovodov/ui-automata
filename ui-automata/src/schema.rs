@@ -1,0 +1,343 @@
+//! Manual `JsonSchema` implementations for types that use custom serde deserializers.
+use std::borrow::Cow;
+
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
+use serde_json::to_value;
+
+use crate::{
+    Condition, RetryPolicy, SelectorPath,
+    condition::{TextMatch, TitleMatch},
+};
+
+// ── Duration helpers ──────────────────────────────────────────────────────────
+
+/// Schema for a `Duration` field serialized as a string like `"5s"` or `"300ms"`.
+/// Use as `#[schemars(schema_with = "crate::schema::duration_schema")]`.
+pub fn duration_schema(_sg: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "string",
+        "description": "Duration string, e.g. \"5s\", \"300ms\", \"2m\", \"1h\""
+    })
+}
+
+// ── SelectorPath ──────────────────────────────────────────────────────────────
+
+impl JsonSchema for SelectorPath {
+    fn schema_name() -> Cow<'static, str> {
+        "SelectorPath".into()
+    }
+
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn json_schema(_sg: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "type": "string",
+            "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance"
+        })
+    }
+}
+
+// ── Condition ─────────────────────────────────────────────────────────────────
+
+impl JsonSchema for Condition {
+    fn schema_name() -> Cow<'static, str> {
+        "Condition".into()
+    }
+
+    fn json_schema(sg: &mut SchemaGenerator) -> Schema {
+        use serde_json::json;
+
+        let text_match = to_value(sg.subschema_for::<TextMatch>()).unwrap();
+        let title_match = to_value(sg.subschema_for::<TitleMatch>()).unwrap();
+        let cond_ref = to_value(sg.subschema_for::<Condition>()).unwrap();
+        let cond_arr = to_value(sg.subschema_for::<Vec<Condition>>()).unwrap();
+
+        let mut variants: Vec<serde_json::Value> = Vec::new();
+
+        let scope_s = || json!({ "type": "string", "description": "Anchor name to resolve the element tree from." });
+        let selector_s =
+            || json!({ "type": "string", "description": "Selector path within the scope anchor." });
+        let anchor_s = || json!({ "type": "string", "description": "Name of the anchor whose window is tracked." });
+
+        // scope + selector variants
+        for (type_name, desc) in &[
+            (
+                "ElementFound",
+                "True when the selector matches at least one live element under the scope anchor.",
+            ),
+            (
+                "ElementEnabled",
+                "True when the matched element is not greyed out (UIA IsEnabled).",
+            ),
+            (
+                "ElementVisible",
+                "True when the matched element is visible on screen (UIA IsOffscreen=false).",
+            ),
+            (
+                "ElementHasChildren",
+                "True when the matched element has at least one child element.",
+            ),
+        ] {
+            variants.push(json!({
+                "type": "object",
+                "description": desc,
+                "required": ["type", "scope", "selector"],
+                "properties": {
+                    "type": { "const": type_name },
+                    "scope": scope_s(),
+                    "selector": selector_s()
+                },
+                "additionalProperties": false
+            }));
+        }
+
+        // ElementHasText — adds `pattern: TextMatch`
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the matched element's text value satisfies the pattern.",
+            "required": ["type", "scope", "selector", "pattern"],
+            "properties": {
+                "type": { "const": "ElementHasText" },
+                "scope": scope_s(),
+                "selector": selector_s(),
+                "pattern": text_match
+            },
+            "additionalProperties": false
+        }));
+
+        // WindowWithAttribute — title fields + automation_id + pid + process
+        variants.push(json!({
+            "type": "object",
+            "description": "True when any open application window matches all specified attributes. Requires at least one of: exact, contains, starts_with, automation_id, pid.",
+            "required": ["type"],
+            "properties": {
+                "type": { "const": "WindowWithAttribute" },
+                "exact":          { "type": "string", "description": "Window title must match exactly." },
+                "contains":       { "type": "string", "description": "Window title must contain this substring." },
+                "starts_with":    { "type": "string", "description": "Window title must start with this string." },
+                "automation_id":  { "type": "string", "description": "UIA AutomationId / AXIdentifier must match exactly." },
+                "pid":            { "type": "integer", "minimum": 0, "description": "Process ID to match exactly." },
+                "process":        { "type": "string", "description": "Process name without .exe (case-insensitive)." }
+            },
+            "additionalProperties": false
+        }));
+
+        // ProcessRunning
+        variants.push(json!({
+            "type": "object",
+            "description": "True when any application window belongs to a process whose name (without .exe) matches, case-insensitive.",
+            "required": ["type", "process"],
+            "properties": {
+                "type": { "const": "ProcessRunning" },
+                "process": { "type": "string", "description": "Process name without .exe (e.g. \"notepad\")." }
+            },
+            "additionalProperties": false
+        }));
+
+        // WindowWithState
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the anchor's window is in the given state. Use after ActivateWindow (active) or to confirm a window is not minimized (visible).",
+            "required": ["type", "anchor", "state"],
+            "properties": {
+                "type": { "const": "WindowWithState" },
+                "anchor": anchor_s(),
+                "state": {
+                    "type": "string",
+                    "enum": ["active", "visible"],
+                    "description": "active: window is the OS foreground window. visible: window is visible on screen (not minimized or hidden)."
+                }
+            },
+            "additionalProperties": false
+        }));
+
+        // WindowClosed — uses `anchor` not `scope`
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the anchor's window is no longer present. If the anchor was resolved with a PID, checks at process level; otherwise attempts re-resolution and treats failure as closed.",
+            "required": ["type", "anchor"],
+            "properties": {
+                "type": { "const": "WindowClosed" },
+                "anchor": anchor_s()
+            },
+            "additionalProperties": false
+        }));
+
+        // scope-only variants
+        for (type_name, desc) in &[
+            (
+                "DialogPresent",
+                "True when a direct child of the scope element has control_type=dialog.",
+            ),
+            (
+                "DialogAbsent",
+                "True when no direct child of the scope element has control_type=dialog.",
+            ),
+        ] {
+            variants.push(json!({
+                "type": "object",
+                "description": desc,
+                "required": ["type", "scope"],
+                "properties": {
+                    "type": { "const": type_name },
+                    "scope": scope_s()
+                },
+                "additionalProperties": false
+            }));
+        }
+
+        // ForegroundIsDialog — optional nested `title: TitleMatch`
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the OS foreground window is a dialog belonging to the same process as scope. Optionally also checks the dialog title.",
+            "required": ["type", "scope"],
+            "properties": {
+                "type": { "const": "ForegroundIsDialog" },
+                "scope": scope_s(),
+                "title": title_match
+            },
+            "additionalProperties": false
+        }));
+
+        // ExecSucceeded — no fields required
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the most recent Exec action exited with code 0.",
+            "required": ["type"],
+            "properties": {
+                "type": { "const": "ExecSucceeded" }
+            },
+            "additionalProperties": false
+        }));
+
+        // EvalCondition — evaluates a boolean expression against outputs/locals/params
+        variants.push(json!({
+            "type": "object",
+            "description": "Evaluates a boolean expression against the current outputs, locals, and params. The expression must return a Bool (use a comparison operator), e.g. \"output.count != '0'\".",
+            "required": ["type", "expr"],
+            "properties": {
+                "type": { "const": "EvalCondition" },
+                "expr": { "type": "string", "description": "Boolean expression to evaluate." }
+            },
+            "additionalProperties": false
+        }));
+
+        // Always — no fields required
+        variants.push(json!({
+            "type": "object",
+            "description": "Always evaluates to true immediately. Use as `expect` on steps where success is guaranteed by the action (e.g. Capture, NoOp).",
+            "required": ["type"],
+            "properties": {
+                "type": { "const": "Always" }
+            },
+            "additionalProperties": false
+        }));
+
+        // AllOf / AnyOf — array of conditions
+        for (type_name, desc) in &[
+            (
+                "AllOf",
+                "Short-circuit AND: true when every sub-condition is true.",
+            ),
+            (
+                "AnyOf",
+                "Short-circuit OR: true when at least one sub-condition is true.",
+            ),
+        ] {
+            variants.push(json!({
+                "type": "object",
+                "description": desc,
+                "required": ["type", "conditions"],
+                "properties": {
+                    "type": { "const": type_name },
+                    "conditions": cond_arr.clone()
+                },
+                "additionalProperties": false
+            }));
+        }
+
+        // Not — single nested condition
+        variants.push(json!({
+            "type": "object",
+            "description": "Negation: true when the inner condition is false.",
+            "required": ["type", "condition"],
+            "properties": {
+                "type": { "const": "Not" },
+                "condition": cond_ref
+            },
+            "additionalProperties": false
+        }));
+
+        // TabWithAttribute — checks title/url of a browser tab
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the browser tab anchored to `scope` matches all specified attribute filters. Requires at least one of: title, url.",
+            "required": ["type", "scope"],
+            "properties": {
+                "type": { "const": "TabWithAttribute" },
+                "scope": { "type": "string", "description": "Name of a mounted Tab anchor." },
+                "title": text_match.clone(),
+                "url": text_match.clone()
+            },
+            "additionalProperties": false
+        }));
+
+        // TabWithState — evaluates a JS expression in a browser tab
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the JS expression `expr` evaluates to a truthy value in the browser tab anchored to `scope`. Use to wait for tab readiness, e.g. `document.readyState === 'complete'`.",
+            "required": ["type", "scope", "expr"],
+            "properties": {
+                "type": { "const": "TabWithState" },
+                "scope": { "type": "string", "description": "Name of a mounted Tab anchor." },
+                "expr": { "type": "string", "description": "JS expression to evaluate in the tab. Returns true when the result is truthy." }
+            },
+            "additionalProperties": false
+        }));
+
+        json!({ "oneOf": variants }).try_into().unwrap()
+    }
+}
+
+// ── RetryPolicy ───────────────────────────────────────────────────────────────
+
+impl JsonSchema for RetryPolicy {
+    fn schema_name() -> Cow<'static, str> {
+        "RetryPolicy".into()
+    }
+
+    fn json_schema(_sg: &mut SchemaGenerator) -> Schema {
+        use serde_json::json;
+        json!({
+            "oneOf": [
+                {
+                    "const": "none",
+                    "description": "No retries. The step fails immediately when the expect condition times out."
+                },
+                {
+                    "const": "with_recovery",
+                    "description": "Opts out of fixed retries for this step — the phase default retry policy does not apply. Recovery handlers still fire as normal on timeout. Fails immediately when no handler matches."
+                },
+                {
+                    "type": "object",
+                    "description": "Retry a fixed number of times with a constant delay between attempts.",
+                    "required": ["fixed"],
+                    "properties": {
+                        "fixed": {
+                            "type": "object",
+                            "required": ["count", "delay"],
+                            "properties": {
+                                "count": { "type": "integer", "minimum": 1, "description": "Number of additional attempts after the first failure." },
+                                "delay": { "type": "string", "description": "Wait between retries, e.g. \"300ms\" or \"2s\"." }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            ]
+        }).try_into().unwrap()
+    }
+}

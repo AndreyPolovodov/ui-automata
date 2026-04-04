@@ -1,0 +1,239 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: mastercam_open_simulator
+description: |
+  Selects all operations in the Toolpaths panel, launches the Mastercam
+  Simulator, and waits for it to be ready.
+
+  Prerequisites: a Mastercam file is already open with toolpaths loaded.
+
+  What it does:
+    1. Activates the main window
+    2. Clicks the Toolpaths tree to focus the panel
+    3. Clicks "Select All Operations" then "Simulate Selected Operations",
+       waiting for the Simulator window to appear
+    4. Waits for the "Processing NCI data" window to close,
+       dismissing any dialogs that appear inside it
+    5. Dismisses the opening dialog on the Simulator window
+
+defaults:
+  timeout: 5s
+  action_snapshot: false
+
+# ── Anchors ────────────────────────────────────────────────────────────────────
+
+anchors:
+  mastercam:
+    type: Root
+    selector: "[name~=Mill|Design]"
+    process: Mastercam
+
+  ribbon_toolbar:
+    type: Stable
+    parent: mastercam
+    selector: "> [role='tool bar'][name=Mastercam]"
+
+  toolpaths:
+    type: Stable
+    parent: mastercam
+    selector: "> [role=pane][name=Toolpaths] > [role=tab]"
+
+  toolpaths_tree:
+    type: Stable
+    parent: toolpaths
+    selector: "> [role=tree]"
+
+  # the top row is the second pane child — confirmed by ui-inspector
+  toolpaths_buttons:
+    type: Stable
+    parent: toolpaths
+    selector: "> [role=pane]:nth(1)"
+
+  # Transient window that appears while Mastercam processes NCI data.
+  # Session tier: lazily resolved, non-fatal if absent.
+  nci_processing:
+    type: Session
+    selector: "[name^=Processing NCI data]"
+    process: Mastercam
+
+  simulator:
+    type: Root
+    selector: "[name~=Simulator]"
+    process: Mastercam
+
+# ── Recovery handlers ──────────────────────────────────────────────────────────
+
+recovery_handlers:
+  dismiss_ok:
+    trigger:
+      type: ForegroundIsDialog
+      scope: mastercam
+    actions:
+      - type: ClickForegroundButton
+        name: OK
+    resume: retry_step
+
+  dismiss_errors:
+    trigger:
+      type: ElementFound
+      scope: mastercam
+      selector: "> [role=dialog][name='Errors or Warnings']"
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: "> [role=dialog][name='Errors or Warnings'] >> [role=button][name=OK]"
+    resume: retry_step
+
+  dismiss_dirty:
+    trigger:
+      type: ElementFound
+      scope: mastercam
+      selector: "> [role=dialog][name~='Dirty Operations Selected']"
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: "> [role=dialog] > [role=button]:nth(0)"
+    resume: retry_step
+
+  dismiss_nci_dialog:
+    trigger:
+      type: DialogPresent
+      scope: nci_processing
+    actions:
+      - type: Click
+        scope: nci_processing
+        selector: "> [role=dialog] > [role=button]:nth(0)"
+    resume: retry_step
+
+  dismiss_simulator_error:
+    trigger:
+      type: DialogPresent
+      scope: simulator
+    actions:
+      - type: Click
+        scope: simulator
+        selector: "> [role=dialog] > [role=button][name=OK]"
+    resume: retry_step
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  # ── 1. Activate the main window ───────────────────────────────────────────────
+  - name: activate_main
+    mount: [mastercam, ribbon_toolbar]
+    steps:
+      - intent: bring the main window to the foreground
+        action:
+          type: ActivateWindow
+          scope: mastercam
+        expect:
+          type: WindowWithState
+          anchor: mastercam
+          state: active
+      - intent: click the Home ribbon tab
+        action:
+          type: Click
+          scope: ribbon_toolbar
+          selector: ">> [role='tab item'][name=Home]"
+        expect:
+          type: ElementFound
+          scope: ribbon_toolbar
+          selector: ">> [role='split button'][name='Run Add-In']"
+
+  # ── 2. Focus the Toolpaths panel ──────────────────────────────────────────────
+  - name: focus_toolpaths
+    mount: [toolpaths, toolpaths_tree, toolpaths_buttons]
+    steps:
+      - intent: hover the toolpaths tree to focus the panel
+        action:
+          type: Hover
+          scope: toolpaths_tree
+          selector: "*"
+        expect:
+          type: ElementFound
+          scope: toolpaths_tree
+          selector: "*"
+
+  # ── 3. Select all operations and launch the simulator ─────────────────────────
+  # Select All is not immediately clickable; retry until it responds.
+  # Clicking Simulate triggers NCI processing before the Simulator window opens.
+  - name: select_and_launch
+    mount: [nci_processing]
+    recovery:
+      handlers: [dismiss_nci_dialog, dismiss_dirty, dismiss_errors, dismiss_ok]
+    steps:
+      - intent: click Select All Operations (first toolbar button)
+        action:
+          type: Click
+          scope: toolpaths_buttons
+          selector: "> [role=button]:nth(0)"
+        expect:
+          type: ElementFound
+          scope: toolpaths_buttons
+          selector: "> [role=button]:nth(0)"
+
+      - intent: click Simulate Selected Operations (seventh toolbar item)
+        action:
+          type: Click
+          scope: toolpaths_buttons
+          selector: "> *:nth(6)" # role='menu item'
+        timeout: 60s
+        expect:
+          type: WindowWithAttribute
+          title:
+            contains: Simulator
+          process: Mastercam
+
+  # ── 4. Wait for NCI processing to finish ──────────────────────────────────────
+  # Skipped if the Processing NCI data window never appeared or already closed.
+  - name: wait_nci_processing
+    precondition:
+      type: WindowWithAttribute
+      title:
+        contains: Processing NCI data
+      process: Mastercam
+    mount: [simulator]
+    recovery:
+      handlers: [dismiss_nci_dialog, dismiss_simulator_error]
+      limit: 100
+    steps:
+      - intent: wait for Processing NCI data window to close
+        action:
+          type: Sleep
+          duration: 3s
+        timeout: 5s
+        retry:
+          fixed:
+            count: 24
+            delay: 0s
+        expect:
+          type: Not
+          condition:
+            type: WindowWithAttribute
+            title:
+              contains: Processing NCI data
+            process: Mastercam
+
+  # ── 5. Mount and ready the Simulator window ───────────────────────────────────
+  - name: ready_simulator
+    mount: [simulator]
+    recovery:
+      handlers: [dismiss_simulator_error]
+    steps:
+      - intent: activate the Simulator window
+        action:
+          type: ActivateWindow
+          scope: simulator
+        expect:
+          type: WindowWithState
+          anchor: simulator
+          state: active
+
+      - intent: dismiss any opening dialog inside the Simulator
+        action:
+          type: DismissDialog
+          scope: simulator
+        on_failure: continue
+        expect:
+          type: DialogAbsent
+          scope: simulator

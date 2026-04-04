@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: explorer_open_folder
+description: |
+  Launch a new File Explorer window, click "Home" in the navigation panel,
+  then double-click a folder to open it.
+
+  The `folder` param is matched against the list item name (e.g. "Documents",
+  "Downloads", "Desktop").
+
+defaults:
+  timeout: 5s
+
+params:
+  - name: folder
+    default: Downloads
+
+launch:
+  exe: explorer.exe
+  wait: new_window
+
+anchors:
+  explorer:
+    type: Root
+    selector: "[role=window]"
+    process: explorer
+
+phases:
+  - name: open_folder
+    mount: [explorer]
+    steps:
+      - intent: activate the Explorer window
+        action:
+          type: ActivateWindow
+          scope: explorer
+        expect:
+          type: WindowWithState
+          anchor: explorer
+          state: active
+      - intent: click "Up" in the app bar
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [id=upButton]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=list item][name=This PC]"
+      - intent: double-click the target folder
+        action:
+          type: DoubleClick
+          scope: explorer
+          selector: ">> [role=list item][name={param.folder}]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=split button][name={param.folder}]"

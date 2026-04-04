@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_close
+description: |
+  Close Notepad if it is running. Dismisses "Don't Save" if prompted.
+  Exits cleanly (success) if Notepad is not running.
+
+  Uses CloseWindow (UIWindowPattern.close / WM_CLOSE) rather than clicking
+  the visual X button. This means:
+  - Notepad does not need to be in the foreground.
+  - Works even if another window is covering Notepad's title bar.
+
+defaults:
+  timeout: 5s
+
+anchors:
+  notepad:
+    type: Root
+    selector: "*"
+    process: notepad
+
+phases:
+  - name: close_notepad
+    precondition:
+      type: ProcessRunning
+      process: notepad
+    mount: [notepad]
+    steps:
+      - intent: activate window in case it is minimized
+        action:
+          type: ActivateWindow
+          scope: notepad
+        expect:
+          type: WindowWithState
+          anchor: notepad
+          state: active
+
+      - intent: close Notepad window
+        action:
+          type: CloseWindow
+          scope: notepad
+        expect:
+          type: AnyOf
+          conditions:
+            - { type: DialogPresent, scope: notepad }
+            - { type: WindowClosed, anchor: notepad }
+
+      - intent: "click Don't Save if unsaved-changes dialog appeared"
+        precondition:
+          type: DialogPresent
+          scope: notepad
+        action:
+          type: Click
+          scope: notepad
+          selector: ">> [role=button][name^=Don][name$=Save]"
+        expect:
+          type: WindowClosed
+          anchor: notepad

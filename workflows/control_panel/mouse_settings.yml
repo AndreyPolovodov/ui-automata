@@ -1,0 +1,53 @@
+name: control_panel_mouse_settings
+description: Open classic Control Panel, search for a term, and click a result link
+
+params:
+  - name: search
+    default: mouse
+  - name: link
+    default: Change mouse settings
+
+launch:
+  exe: control.exe
+  wait_for: panel
+
+anchors:
+  panel:
+    type: Root
+    process: explorer
+    selector: "[name=Control Panel]"
+
+phases:
+  - name: search
+    mount: [panel]
+    steps:
+      - intent: wait for Control Panel to load
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: ">> [id=SearchEditBox]"
+        timeout: 10s
+
+      - intent: type search term into the search box
+        action:
+          type: TypeText
+          scope: panel
+          selector: ">> [id=SearchEditBox]"
+          text: "{param.search}"
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: ">> [role=link][name={param.link}]"
+        timeout: 10s
+
+      - intent: click the result link to open the settings dialog
+        action:
+          type: Click
+          scope: panel
+          selector: ">> [role=link][name={param.link}]"
+        expect:
+          type: ForegroundIsDialog
+          scope: panel
+        timeout: 10s

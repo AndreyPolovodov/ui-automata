@@ -1075,6 +1075,53 @@
             "type",
             "condition"
           ]
+        },
+        {
+          "description": "True when the browser tab anchored to `scope` matches all specified attribute filters. Requires at least one of: title, url.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Name of a mounted Tab anchor.",
+              "type": "string"
+            },
+            "title": {
+              "$ref": "#/$defs/TextMatch"
+            },
+            "type": {
+              "const": "TabWithAttribute"
+            },
+            "url": {
+              "$ref": "#/$defs/TextMatch"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
+          "description": "True when the JS expression `expr` evaluates to a truthy value in the browser tab anchored to `scope`. Use to wait for tab readiness, e.g. `document.readyState === 'complete'`.",
+          "type": "object",
+          "properties": {
+            "expr": {
+              "description": "JS expression to evaluate in the tab. Returns true when the result is truthy.",
+              "type": "string"
+            },
+            "scope": {
+              "description": "Name of a mounted Tab anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "TabWithState"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "expr"
+          ]
         }
       ]
     },
@@ -1318,7 +1365,7 @@
           "const": "none"
         },
         {
-          "description": "Retry indefinitely as long as a recovery handler fires on each timeout. Fails when a timeout occurs with no matching handler.",
+          "description": "Opts out of fixed retries for this step — the phase default retry policy does not apply. Recovery handlers still fire as normal on timeout. Fails immediately when no handler matches.",
           "const": "with_recovery"
         },
         {

@@ -1,0 +1,203 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: mastercam_load_file
+description: |
+  Opens a Mastercam file, extracts toolpath names, and runs the add-in export.
+
+  Prerequisites: mastercam_reset have already run — the main window is open.
+
+  What it does:
+    1. Opens the file via Quick Access Toolbar
+    2. Dismisses any "Errors or Warnings" dialogs that appear after load
+    3. Extracts all leaf toolpath names
+
+params:
+  - name: file_path
+    description: Full path to the .mcam file to open.
+
+outputs:
+  - name: toolpaths
+    description: List of toolpaths extracted from the toolpath tree.
+  - name: addin_export
+    description: Full path to the file exported by addin.
+
+defaults:
+  timeout: 5s
+  retry:
+    fixed:
+      count: 3
+      delay: 1s
+  # Mastercam's UIA tree is large and deeply nested; snapshotting after every
+  # action is slow. Disable it and rely on on-demand syncs during polling.
+  action_snapshot: false
+
+# ── Anchors ────────────────────────────────────────────────────────────────────
+
+anchors:
+  mastercam:
+    type: Root
+    selector: "[name~=Mill|Design]"
+    process: Mastercam
+
+  quickaccess:
+    type: Stable
+    parent: mastercam
+    selector: "> [role='tool bar'][name=Mastercam] > [role='tool bar'][name='Quick Access Toolbar']"
+
+  open_dialog:
+    type: Ephemeral
+    parent: mastercam
+    selector: "> [role=dialog][name=Open]"
+
+  toolpaths_tree:
+    type: Stable
+    parent: mastercam
+    selector: "> [role=pane][name=Toolpaths] >> [role=tree]"
+
+# ── Recovery handlers ──────────────────────────────────────────────────────────
+
+recovery_handlers:
+  dismiss_dont_save:
+    trigger:
+      type: DialogPresent
+      scope: mastercam
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: ">> [role=button][name^=Don][name$=Save]"
+    resume: retry_step
+
+  dismiss_ok:
+    trigger:
+      type: ForegroundIsDialog
+      scope: mastercam
+    actions:
+      - type: ClickForegroundButton
+        name: OK
+    resume: retry_step
+
+  # "Errors or Warnings" dialog appears as a direct child of the main window
+  # after some files load. Dismiss it and retry so wait_for_file can re-check.
+  # If multiple dialogs appear they are dismissed one per retry cycle.
+  dismiss_errors:
+    trigger:
+      type: ElementFound
+      scope: mastercam
+      selector: "> [role=dialog][name='Errors or Warnings']"
+    actions:
+      - type: Click
+        scope: mastercam
+        selector: "> [role=dialog][name='Errors or Warnings'] >> [role=button][name=OK]"
+    resume: retry_step
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  # ── 1. Mount all anchors ─────────────────────────────────────────────────────
+  - name: mount_main
+    mount: [mastercam, quickaccess]
+    steps:
+      - intent: activate window in case it is minimized
+        action:
+          type: ActivateWindow
+          scope: mastercam
+        expect:
+          type: WindowWithState
+          anchor: mastercam
+          state: active
+
+  # ── 2. Click Open in the Quick Access Toolbar ─────────────────────────────────
+  - name: click_open
+    recovery:
+      handlers: [dismiss_dont_save, dismiss_ok]
+    steps:
+      - intent: click the Open split button to open a file dialog
+        action:
+          type: Click
+          scope: quickaccess
+          selector: ">> [role='split button'][name=Open]"
+        expect:
+          type: DialogPresent
+          scope: mastercam
+
+  # ── 3. Type the file path and press Enter ─────────────────────────────────────
+  # Enter either dismisses autocomplete (dialog stays) or submits the dialog.
+  - name: enter_file_path
+    mount: [open_dialog]
+    recovery:
+      handlers: [dismiss_ok]
+    steps:
+      - intent: type the file path into the File name field
+        action:
+          type: SetValue
+          scope: open_dialog
+          selector: ">> [role='combo box'][name='File name:'] >> [role=edit]"
+          value: "{param.file_path}"
+        expect:
+          type: ElementHasText
+          scope: open_dialog
+          selector: ">> [role='combo box'][name='File name:'] >> [role=edit]"
+          pattern:
+            contains: "."
+
+      - intent: press Enter to dismiss autocomplete or submit the dialog
+        action:
+          type: PressKey
+          scope: open_dialog
+          selector: ">> [role='combo box'][name='File name:'] >> [role=edit]"
+          key: "{ENTER}"
+        expect:
+          type: Always
+
+  # ── 4. Click Open if the dialog is still present ─────────────────────────────
+  # Skipped if Enter already closed the dialog.
+  - name: click_open_button
+    precondition:
+      type: ElementFound
+      scope: mastercam
+      selector: "> [role=dialog][name=Open]"
+    unmount: [open_dialog]
+    recovery:
+      handlers: [dismiss_ok]
+    steps:
+      - intent: click Open to load the file
+        action:
+          type: Click
+          scope: open_dialog
+          selector: ">> [role=button][name=Open]"
+        expect:
+          type: DialogAbsent
+          scope: mastercam
+
+  # ── 5. Dismiss any "Errors or Warnings" dialogs that appear after file load ────
+  - name: wait_for_file
+    recovery:
+      handlers: [dismiss_errors]
+    steps:
+      - intent: wait until all error dialogs are dismissed
+        action:
+          type: Sleep
+          duration: 3s
+        expect:
+          type: DialogAbsent
+          scope: mastercam
+
+  # ── 6. Extract all leaf toolpath names ───────────────────────────────────────
+  # Selector navigates: Tree > L1 TreeItem (group headers) >> L3 TreeItems (leaves).
+  # L2 intermediates are not TreeItems, so >> selects only the actual toolpaths.
+  - name: list_toolpaths
+    mount: [toolpaths_tree]
+    recovery:
+      handlers: [dismiss_errors]
+    steps:
+      - intent: extract all toolpath names into the output buffer
+        action:
+          type: Extract
+          key: toolpaths
+          scope: toolpaths_tree
+          selector: "> [role='tree item'] > * > [role='tree item']"
+          attribute: name
+          multiple: true
+        expect:
+          type: EvalCondition
+          expr: "output_count('toolpaths') > 0"

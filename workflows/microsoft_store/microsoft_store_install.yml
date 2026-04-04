@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: microsoft_store_install
+description: |
+  Install an app from the Microsoft Store.
+
+  Assumes the Store is already open and showing search results (e.g. after
+  running microsoft_store_search). Finds the first result card whose name
+  starts with the given app name, hovers to reveal the install control,
+  clicks Get, then waits up to 60 s for installation to complete and clicks Open.
+
+  Params:
+    - install : name prefix of the app to install (e.g. "Python")
+
+params:
+  - name: install
+    description: Name prefix of the app to install (matched against card names).
+    default: "Python 3.12"
+
+defaults:
+  timeout: 15s
+
+anchors:
+  store:
+    type: Root
+    process: ApplicationFrameHost
+    selector: "[name=Microsoft Store]"
+
+phases:
+
+  - name: activate
+    mount: [store]
+    steps:
+      - intent: bring the Store window to the foreground and confirm results are visible
+        action:
+          type: ActivateWindow
+          scope: store
+        expect:
+          type: ElementFound
+          scope: store
+          selector: ">> [id=SearchResultsMainTitle]"
+
+  - name: install
+    mount: [store]
+    steps:
+      - intent: hover over the matching result card to reveal the install control
+        action:
+          type: Hover
+          scope: store
+          selector: ">> [role=card][name^={param.install}]"
+        expect:
+          type: ElementFound
+          scope: store
+          selector: ">> [id=InlineInstallControl]"
+
+      - intent: wait for the Get/Install button to appear
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: store
+          selector: ">> [role=group] > [role=button]"
+
+      - intent: invoke the Get/Install button to start installation
+        precondition:
+          type: ElementFound
+          scope: store
+          selector: ">> [role=group] > [role=button][name=Get|Install]"
+        action:
+          type: Invoke
+          scope: store
+          selector: ">> [role=group] > [role=button][name=Get|Install]"
+        expect:
+          type: ElementFound
+          scope: store
+          selector: ">> [role=group] > [role=button][name=Open]"
+        timeout: 60s
+
+      - intent: invoke Open once installation is complete
+        action:
+          type: Invoke
+          scope: store
+          selector: ">> [role=group] > [role=button][name=Open]"
+        expect:
+          type: WindowWithState
+          anchor: store
+          state: visible
+        timeout: 30s

@@ -1,0 +1,49 @@
+[package]
+name = "automata-windows"
+authors = ["Chris Tsang <chris.2y3@outlook.com>"]
+description = "Declarative Workflow Engine for Windows UI Automation"
+homepage = "http://www.visioncortex.org/ui-automata/"
+repository = "https://github.com/visioncortex/ui-automata/"
+version = { workspace = true }
+edition = "2024"
+license = "GPL-3.0-only"
+
+[lib]
+name = "automata_windows"
+path = "src/lib.rs"
+
+[dependencies]
+ui-automata = { path = "../ui-automata", version = "0.1.0" }
+automata-browser = { path = "../automata-browser", version = "0.1.0" }
+
+anyhow = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+chrono = { workspace = true }
+fern = { version = "0.7", features = ["colored"] }
+clap = { workspace = true }
+time = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+uiautomation = { workspace = true }
+visioncortex = { workspace = true }
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Registry",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+] }

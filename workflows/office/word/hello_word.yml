@@ -1,0 +1,160 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: hello_word
+description: |
+  Word smoke test — opens Word, creates a blank document, types "hello word!",
+  sets the font size to 48, then closes without saving.
+
+  What it does:
+    1. Launches Word and opens a blank document from the Backstage view
+    2. Types "hello word!" into the page editor
+    3. Reveals the Home ribbon if collapsed
+    4. Sets Font Size to 48
+    5. Closes the window and clicks "Don't Save"
+
+defaults:
+  timeout: 5s
+  action_snapshot: false
+
+launch:
+  exe: winword.exe
+  wait: new_window
+
+# ── Anchors ─────────────────────────────────────────────────────────────────────
+
+anchors:
+  word:
+    type: Root
+    process: WINWORD
+    selector: "[title~=Word]"
+
+  editor:
+    type: Stable
+    parent: word
+    selector: ">> [role=document]"
+
+# ── Phases ───────────────────────────────────────────────────────────────────────
+
+phases:
+  # ── 1. Open a blank document ──────────────────────────────────────────────────
+  - name: new_document
+    mount: [word]
+    steps:
+      - intent: invoke "Blank document" from the Backstage view
+        action:
+          type: Invoke
+          scope: word
+          selector: ">> [id=BackstageView] >> [role=List Item][name^=Blank]"
+        expect:
+          type: ElementFound
+          scope: word
+          selector: ">> [role=document]"
+
+  # ── 2. Type text ──────────────────────────────────────────────────────────────
+  - name: type_text
+    mount: [editor]
+    steps:
+      - intent: focus document first
+        action:
+          type: Focus
+          scope: editor
+          selector: "*"
+        expect:
+          type: ElementFound
+          scope: editor
+          selector: "*"
+      - intent: type "hello word!" into the page editor
+        action:
+          type: TypeText
+          scope: editor
+          selector: "*"
+          text: "hello word!"
+        expect:
+          type: ElementFound
+          scope: editor
+          selector: "*"
+      - intent: select all
+        action:
+          type: PressKey
+          scope: editor
+          selector: "*"
+          key: "{ctrl}a"
+        expect:
+          type: ElementHasText
+          scope: word
+          selector: ">> [role=Status Bar] >> [role=Text]"
+          pattern:
+            contains: " of "
+
+  # ── 3. Reveal Home ribbon if collapsed ────────────────────────────────────────
+  - name: reveal_home_ribbon
+    precondition:
+      type: Not
+      condition:
+        type: ElementFound
+        scope: word
+        selector: ">> [id=FontSize]"
+    steps:
+      - intent: click Home tab to reveal the ribbon
+        action:
+          type: Click
+          scope: word
+          selector: ">> [id=TabHome]"
+        expect:
+          type: ElementFound
+          scope: word
+          selector: ">> [id=FontSize]"
+
+  # ── 4. Set font size to 48 ────────────────────────────────────────────────────
+  - name: set_font_size
+    steps:
+      - intent: set Font Size to 48
+        action:
+          type: SetValue
+          scope: word
+          selector: ">> [id=FontSize] > [role=Edit Box]"
+          value: "48"
+        expect:
+          type: ElementHasText
+          scope: word
+          selector: ">> [id=FontSize] > [role=Edit Box]"
+          pattern:
+            exact: "48"
+
+      - intent: press Enter to confirm font size
+        action:
+          type: PressKey
+          scope: word
+          selector: ">> [id=FontSize] > [role=Edit Box]"
+          key: "{ENTER}"
+        expect:
+          type: ElementFound
+          scope: editor
+          selector: "*"
+
+      - intent: delay to show the demo
+        action:
+          type: Sleep
+          duration: 2s
+        expect:
+          type: Always
+
+  # ── 5. Close and discard ──────────────────────────────────────────────────────
+  - name: close_word
+    steps:
+      - intent: close the Word window — triggers the "Save your changes?" dialog
+        action:
+          type: CloseWindow
+          scope: word
+        expect:
+          type: ElementFound
+          scope: word
+          selector: ">> [role=Window][title^='Save your changes']"
+
+      - intent: click Don't Save
+        action:
+          type: Click
+          scope: word
+          selector: ">> [role=Button][name^=Don][name$=Save]"
+        expect:
+          type: WindowClosed
+          anchor: word

@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_dialog_present
+description: |
+  Probe workflow — reports two boolean outputs:
+    - notepad_running : if any Notepad window is currently open.
+    - dialog_present  : if Notepad has a dialog open.
+
+  No windows are opened or closed; this is a read-only probe.
+
+defaults:
+  timeout: 5s
+
+anchors:
+  notepad:
+    type: Root
+    process: notepad
+    selector: "*"
+
+outputs:
+  - name: notepad_running
+    description: '1 if Notepad is running, "" otherwise.'
+  - name: dialog_present
+    description: '1 if Notepad has an unsaved-changes dialog open, "" otherwise.'
+
+phases:
+
+  - name: check_running
+    mount: [notepad]
+    precondition:
+      type: ProcessRunning
+      process: notepad
+    steps:
+      - intent: record that notepad is running
+        action:
+          type: Eval
+          key: running
+          expr: "1"
+          output: notepad_running
+        expect:
+          type: Always
+
+  - name: check_dialog
+    mount: [notepad]
+    precondition:
+      type: ProcessRunning
+      process: notepad
+    steps:
+      - intent: record dialog_present if a save dialog is open
+        action:
+          type: Eval
+          key: dialog
+          expr: "1"
+          output: dialog_present
+        precondition:
+          type: DialogPresent
+          scope: notepad
+        expect:
+          type: Always

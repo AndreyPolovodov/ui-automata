@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_scroll_font
+description: |
+  Open Notepad's Format > Font dialog and select a font that is scrolled
+  out of view in the font list (default: "Wingdings"). Uses ScrollIntoView
+  to scroll the list before clicking, then confirms the dialog.
+
+  Requires Notepad to already be open.
+
+params:
+  - name: font
+    description: Font name to scroll to and select in the font list.
+    default: "Wingdings"
+
+defaults:
+  timeout: 8s
+
+anchors:
+  notepad:
+    type: Root
+    selector: "[name~=Notepad]"
+    process: notepad
+
+  menubar:
+    type: Stable
+    parent: notepad
+    selector: ">> [role='menu bar'][name=Application]"
+
+  font_dialog:
+    type: Ephemeral
+    parent: notepad
+    selector: ">> [role=dialog][name=Font]"
+
+phases:
+
+  - name: find_notepad
+    mount: [notepad]
+    steps:
+      - intent: activate window in case it is minimized
+        action:
+          type: ActivateWindow
+          scope: notepad
+        expect:
+          type: WindowWithState
+          anchor: notepad
+          state: active
+
+      - intent: type text into editor, if empty
+        precondition:
+          type: Not
+          condition:
+            type: ElementHasText
+            scope: notepad
+            selector: ">> [role=edit][name='Text Editor']"
+            pattern:
+              non_empty: true
+        action:
+          type: TypeText
+          scope: notepad
+          selector: ">> [role=edit][name='Text Editor']"
+          text: "hello, world"
+        expect:
+          type: ElementHasText
+          scope: notepad
+          selector: ">> [role=edit][name='Text Editor']"
+          pattern:
+            contains: "hello"
+
+  - name: open_font_dialog
+    mount: [menubar]
+    steps:
+      - intent: click Format menu
+        action:
+          type: Click
+          scope: menubar
+          selector: "[role='menu bar'] > [role='menu item'][name=Format]"
+        expect:
+          type: ElementFound
+          scope: notepad
+          selector: "[name~=Notepad] >> [role='menu item'][name~=Font]"
+
+      - intent: click Font menu item
+        action:
+          type: Click
+          scope: notepad
+          selector: "[name~=Notepad] >> [role='menu item'][name~=Font]"
+        expect:
+          type: DialogPresent
+          scope: notepad
+
+  - name: scroll_and_select_font
+    mount: [font_dialog]
+    unmount: [font_dialog]
+    steps:
+      - intent: scroll font list until target font is visible
+        action:
+          type: ScrollIntoView
+          scope: font_dialog
+          selector: ">> [role='list'] >> [role='list item'][name='{param.font}']"
+        expect:
+          type: ElementFound
+          scope: font_dialog
+          selector: ">> [role='list'] >> [role='list item'][name='{param.font}']"
+
+      - intent: click the target font
+        action:
+          type: Click
+          scope: font_dialog
+          selector: ">> [role='list'] >> [role='list item'][name='{param.font}']"
+        expect:
+          type: ElementHasText
+          scope: font_dialog
+          selector: "[role=dialog][name=Font] >> [role='combo box'][name='Font:'] > [role=edit][name='Font:']"
+          pattern:
+            contains: "{param.font}"
+
+      - intent: confirm dialog
+        action:
+          type: Click
+          scope: font_dialog
+          selector: "[role=dialog][name=Font] > [role=button][name=OK]"
+        expect:
+          type: DialogAbsent
+          scope: notepad

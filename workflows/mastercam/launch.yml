@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: mastercam_launch
+description: |
+  Launches Mastercam and waits until it is fully ready.
+
+  What it does:
+    1. Launches Mastercam.exe, polls until main window appears and splash is gone
+    2. Mounts and activates the main window
+
+defaults:
+  timeout: 10s
+  action_snapshot: false
+
+launch:
+  exe: Mastercam.exe
+  wait: new_pid
+  timeout: 60s
+
+# ── Anchors ────────────────────────────────────────────────────────────────────
+
+anchors:
+  mastercam:
+    type: Root
+    selector: "[name~=Mastercam Design]"
+    process: Mastercam
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  # ── 1. Wait for the main window and splash to settle ──────────────────────────
+  - name: wait_ready
+    steps:
+      - intent: wait for main window and splash to be gone
+        action:
+          type: NoOp
+        timeout: 5s
+        retry:
+          fixed:
+            count: 24
+            delay: 0s
+        expect:
+          type: AllOf
+          conditions:
+            - type: WindowWithAttribute
+              title:
+                contains: "Mastercam Design"
+              process: Mastercam
+            - type: Not
+              condition:
+                type: WindowWithAttribute
+                automation_id: SplashScreenManagerViewUserControlOverlay
+                process: Mastercam
+
+  # ── 2. Activate the main window ────────────────────────────────────────────────
+  - name: activate_main_window
+    mount: [mastercam]
+    steps:
+      - intent: activate the main window
+        action:
+          type: NoOp
+        expect:
+          type: WindowWithState
+          anchor: mastercam
+          state: active

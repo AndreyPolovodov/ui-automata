@@ -1,0 +1,32 @@
+[package]
+name = "ui-automata"
+authors = ["Chris Tsang <chris.2y3@outlook.com>"]
+description = "Declarative Workflow Engine for UI Automation"
+homepage = "http://www.visioncortex.org/ui-automata/"
+repository = "https://github.com/visioncortex/ui-automata/"
+version = { workspace = true }
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "ui_automata"
+path = "src/lib.rs"
+
+[features]
+mock = []
+
+[dependencies]
+log = { workspace = true }
+fancy-regex = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+serde_path_to_error = "0.1.20"
+saphyr = "0.0.6"
+saphyr-parser = "0.0.6"
+dirs = { workspace = true }
+
+[dev-dependencies]
+ui-automata = { path = ".", features = ["mock"] }

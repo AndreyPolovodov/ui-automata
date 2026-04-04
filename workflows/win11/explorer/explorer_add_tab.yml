@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: explorer_add_tab
+description: |
+  Open a new Explorer window, add a second tab and navigate it to Downloads,
+  then switch back to the first tab.
+
+defaults:
+  timeout: 5s
+
+launch:
+  exe: explorer.exe
+  wait: new_window
+
+anchors:
+  explorer:
+    type: Root
+    selector: "[role=window]"
+    process: explorer
+
+  address_bar:
+    type: Stable
+    parent: explorer
+    selector: ">> [role=edit][name^=Address]"
+
+phases:
+  - name: open_new_tab
+    mount: [explorer]
+    steps:
+      - intent: click the Add New Tab button
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [id=AddButton]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [id=TabListView]"
+
+  - name: navigate_tab2_to_downloads
+    mount: [explorer, address_bar]
+    unmount: [address_bar]
+    steps:
+      - intent: click the address bar
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [role=edit][name^=Address]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=edit][name^=Address]"
+      - intent: type the Downloads path
+        action:
+          type: SetValue
+          scope: address_bar
+          selector: "*"
+          value: "C:\\Users\\%USERNAME%\\Downloads"
+        expect:
+          type: ElementHasText
+          scope: address_bar
+          selector: "*"
+          pattern:
+            contains: "Downloads"
+      - intent: confirm navigation
+        action:
+          type: PressKey
+          scope: address_bar
+          selector: "*"
+          key: "{ENTER}"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=edit][name^=Address]"
+
+  - name: switch_to_first_tab
+    mount: [explorer]
+    steps:
+      - intent: click the first tab item
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [id=TabListView] > [role=tab item]:first"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [id=TabListView]"

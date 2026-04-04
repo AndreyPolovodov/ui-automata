@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_loop_counter
+description: |
+  Counts from 1 to 10, appending each number to the Notepad editor.
+
+  Outputs:
+    - step  : running total after each iteration (1, 3, 6, 10, 15, 21, 28, 36, 45, 55)
+    - sum   : final sum = 55
+
+launch:
+  exe: notepad.exe
+  wait: new_window
+
+anchors:
+  notepad:
+    type: Root
+    process: Notepad
+    selector: "[name~=Notepad]"
+
+  editor:
+    type: Stable
+    parent: notepad
+    selector: ">> [role=document][name='Text editor']"
+
+defaults:
+  timeout: 5s
+
+outputs:
+  - name: step
+    description: Running total after each iteration (1, 3, 6, 10, 15, 21, 28, 36, 45, 55)
+  - name: sum
+    description: Sum of 1 to 10 (= 55)
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  - name: init
+    mount: [notepad, editor]
+    steps:
+      - intent: initialise counter
+        action:
+          type: Eval
+          key: i
+          expr: "1"
+        expect:
+          type: Always
+      - intent: initialise total
+        action:
+          type: Eval
+          key: total
+          expr: "0"
+        expect:
+          type: Always
+
+  - name: check
+    flow_control:
+      condition:
+        type: EvalCondition
+        expr: "i > 10"
+      go_to: done
+
+  - name: loop_body
+    steps:
+      - intent: accumulate running total
+        action:
+          type: Eval
+          key: total
+          expr: "total + i"
+        expect:
+          type: Always
+
+      - intent: append counter value to Notepad
+        action:
+          type: TypeText
+          scope: editor
+          selector: "*"
+          text: "{output.i}\n"
+        expect:
+          type: Always
+
+      - intent: record running total in output buffer
+        action:
+          type: Eval
+          key: total
+          expr: "total"
+          output: step
+        expect:
+          type: Always
+
+      - intent: increment counter
+        action:
+          type: Eval
+          key: i
+          expr: "i + 1"
+        expect:
+          type: Always
+
+  - name: loop_back
+    flow_control:
+      condition:
+        type: Always
+      go_to: check
+
+  - name: done
+    steps:
+      - intent: publish final sum to output buffer
+        action:
+          type: Eval
+          key: total
+          expr: "total"
+          output: sum
+        expect:
+          type: Always
+
+      - intent: append sum line to Notepad
+        action:
+          type: TypeText
+          scope: editor
+          selector: "*"
+          text: "Sum: {output.sum}"
+        expect:
+          type: Always

@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: mastercam_process_file
+description: |
+  End-to-end Mastercam pipeline for a single file:
+    1. Ensures the add-in is loaded — skips load if already present.
+    2. Opens the .mcam file and runs the add-in export.
+    3. Opens the Mastercam Simulator.
+    4. Fast-forwards and saves the Operation Info CSV.
+    5. Resets Mastercam to a clean state.
+    6. Runs a Python post-processing script to stitch the outputs.
+    7. Moves the .mcam file into a 'done' subdirectory.
+
+  Prerequisites: Mastercam is already running.
+
+
+params:
+  - name: file_path
+    description: Full path to the .mcam file to process.
+
+  - name: output_dir
+    description: Directory where the simulator Operation Info CSV is saved.
+    default: "{env.USERPROFILE}\\Documents\\"
+
+  - name: script_path
+    description: Full path to the Python post-processing script.
+    default: "{workflow.dir}\\post_process.py"
+
+outputs:
+  - name: saved_file
+    description: The final output CSV file
+
+defaults:
+  timeout: 5s
+  action_snapshot: false
+
+# ── Phases ─────────────────────────────────────────────────────────────────────
+
+phases:
+
+  # ── 1. Open file and extract toolpaths ────────────────────────────────────────
+  - name: open_file
+    subflow: open_file.yml
+    params:
+      file_path: "{param.file_path}"
+
+  # ── 2. Open Mastercam Simulator ───────────────────────────────────────────────
+  - name: open_simulator
+    subflow: open_simulator.yml
+
+  # ── 3. Fast-forward and save Operation Info CSV ───────────────────────────────
+  - name: save_operation_info
+    subflow: simulator_save_operation.yml
+    params:
+      output_dir: "{param.output_dir}"
+
+  # ── 4. Reset Mastercam to a clean state ──────────────────────────────────────
+  - name: reset
+    subflow: reset.yml
+
+  # ── 5. Stitch outputs with Python ─────────────────────────────────────────────
+  - name: stitch_outputs
+    steps:
+      - intent: write toolpath names to a temp file for the script
+        action:
+          type: WriteOutput
+          key: toolpaths
+          path: "{param.output_dir}{output.saved_file}_toolpaths.csv"
+        expect:
+          type: Always
+
+      - intent: run post-processing script
+        action:
+          type: Exec
+          command: python
+          args:
+            - "{param.script_path}"
+            - "--simulator-output"
+            - "{param.output_dir}{output.saved_file}"
+            - "--toolpaths-csv"
+            - "{param.output_dir}{output.saved_file}_toolpaths.csv"
+        expect:
+          type: ExecSucceeded

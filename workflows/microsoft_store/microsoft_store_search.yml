@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: microsoft_store_search
+description: |
+  Search the Microsoft Store for a given term and return all visible result cards.
+
+  Opens the Store via its URI scheme, activates the window, clicks the search
+  box, types the search term, presses Enter, waits for result cards to appear,
+  then extracts all card names (app name + rating + price).
+
+  Params:
+    - search_term : the query to submit (e.g. "python", "notepad")
+
+  Outputs:
+    - results : list of result card names, one entry per visible card
+
+params:
+  - name: search_term
+    default: python
+    description: Search query to submit to the Microsoft Store.
+
+outputs:
+  - name: results
+    description: Result card names (app name + rating + price), one per card.
+
+defaults:
+  timeout: 30s
+
+launch:
+  app: ms-windows-store
+  wait: match_any
+
+anchors:
+  store:
+    type: Root
+    process: ApplicationFrameHost
+    selector: "[name~=Microsoft Store]"
+
+  search_box:
+    type: Stable
+    parent: store
+    selector: ">> [id=SearchBox]"
+
+phases:
+
+  - name: search
+    mount: [store, search_box]
+    steps:
+      - intent: wait for the search box to appear
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: search_box
+          selector: ">> [id=TextBox]"
+
+      - intent: click the search box to focus it
+        action:
+          type: Click
+          scope: search_box
+          selector: ">> [id=TextBox]"
+        expect:
+          type: ElementFound
+          scope: search_box
+          selector: ">> [id=TextBox]"
+
+      - intent: clear any existing text in the search box
+        action:
+          type: SetValue
+          scope: search_box
+          selector: ">> [id=TextBox]"
+          value: ""
+        expect:
+          type: ElementHasText
+          scope: search_box
+          selector: ">> [id=TextBox]"
+          pattern:
+            exact: ""
+
+      - intent: type the search term
+        action:
+          type: TypeText
+          scope: search_box
+          selector: ">> [id=TextBox]"
+          text: "{param.search_term}"
+        expect:
+          type: ElementHasText
+          scope: search_box
+          selector: ">> [id=TextBox]"
+          pattern:
+            contains: "{param.search_term}"
+
+      - intent: press Enter to submit the search
+        action:
+          type: PressKey
+          scope: search_box
+          selector: ">> [id=TextBox]"
+          key: "{ENTER}"
+        expect:
+          type: ElementFound
+          scope: store
+          selector: ">> [id=SearchResultsMainTitle]"
+
+  - name: extract_results
+    mount: [store]
+    steps:
+      - intent: extract all visible card names
+        action:
+          type: Extract
+          key: results
+          scope: store
+          selector: ">> [role=card]"
+          attribute: name
+          multiple: true
+        expect:
+          type: ElementFound
+          scope: store
+          selector: ">> [role=card]"

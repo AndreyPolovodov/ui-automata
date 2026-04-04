@@ -1,0 +1,269 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_demo
+description: |
+  Notepad smoke test — exercises the ui-automata executor end-to-end.
+
+  What it does:
+    1. Launches Notepad
+    2. Types "Hello World"
+    3. Opens Format > Font dialog (via menu clicks)
+    4. Reads the current font size, increments by 8, cycling back to 12 after 22
+       using the formula: (size + 8) % 24 + 12
+    5. Confirms with OK
+    6. Saves the file to the default location (triggers Save As dialog)
+    7. Confirms the filename and saves
+    8. Types more text ("Goodbye")
+    9. Closes the window — Notepad shows an unsaved-changes dialog
+   10. Clicks "Don't Save"
+
+# ── Parameters ────────────────────────────────────────────────────────────────
+# Defaults here; override via CLI: ./workflow notepad.yml -- --text "hi" --save-as out.txt
+params:
+  - name: text
+    description: Text to type into Notepad.
+    default: "Hello World"
+  - name: save_as
+    description: Filename to use in the Save As dialog.
+    default: "hello-world.txt"
+
+defaults:
+  timeout: 3s
+
+# ── Launch App ────────────────────────────────────────────────────────────────
+launch:
+  exe: notepad.exe
+  wait: new_window
+
+# ── Anchor library ────────────────────────────────────────────────────────────
+# All anchors are declared here. Phases control when they are mounted/unmounted.
+anchors:
+  notepad:
+    type: Root
+    process: Notepad
+    selector: "[name~=Notepad]"
+
+  editor:
+    type: Stable
+    parent: notepad
+    selector: ">> [role=document][name='Text editor']"
+
+  menubar:
+    type: Stable
+    parent: notepad
+    selector: ">> [role='menu bar'][id=MenuBar]"
+
+  tab_list:
+    type: Stable
+    parent: notepad
+    selector: ">> [id=TabListView]"
+
+  font_panel:
+    type: Ephemeral
+    parent: notepad
+    selector: ">> [role=group][name=Font]"
+
+  saveas_dialog:
+    type: Ephemeral
+    parent: notepad
+    selector: "> [role=dialog][name^=Save]"
+
+# ── Recovery handler library ──────────────────────────────────────────────────
+# Named handlers referenced by phases via `recovery: handlers: [name, ...]`.
+recovery_handlers:
+  confirm_overwrite:
+    trigger:
+      type: ElementFound
+      scope: notepad
+      selector: ">> [role=dialog][name='Confirm Save As']"
+    actions:
+      - type: Invoke
+        scope: notepad
+        selector: ">> [role=dialog][name='Confirm Save As'] >> [role=button][name=Yes]"
+    resume: retry_step
+
+# ── Phases ────────────────────────────────────────────────────────────────────
+phases:
+
+  - name: type_text
+    mount: [notepad, editor]  # mounted before steps run
+    steps:
+      - intent: type text into editor
+        action:
+          type: TypeText
+          scope: editor
+          selector: "*"
+          text: "{param.text}"
+        expect:
+          type: ElementHasText
+          scope: editor
+          selector: "*"
+          pattern:
+            contains: "{param.text}"
+
+  - name: open_font_panel
+    mount: [menubar]
+    steps:
+      - intent: click Edit menu and wait for popup
+        action:
+          type: Click
+          scope: menubar
+          selector: "> [role='menu item'][name=Edit]"
+        expect:
+          type: ElementFound
+          scope: notepad
+          selector: ">> [role='menu item'][name=Font]"
+
+      - intent: click Font menu item in popup
+        action:
+          type: Click
+          scope: notepad
+          selector: ">> [role='menu item'][name=Font]"
+        expect:
+          type: ElementFound
+          scope: notepad
+          selector: ">> [id=SettingHeader]"
+
+  - name: set_font_size
+    mount: [font_panel]
+    unmount: [font_panel]
+    steps:
+      - intent: read current font size
+        action:
+          type: Extract
+          key: size
+          scope: font_panel
+          selector: ">> [role='combo box'][name='Size'] > [role=edit][name='Size']"
+          attribute: text
+        expect:
+          type: EvalCondition
+          expr: "output.size != ''"
+
+      - intent: compute next font size
+        action:
+          type: Eval
+          key: new_size
+          expr: "(size + 8) % 24 + 12"
+        expect:
+          type: Always
+
+      - intent: set font size to computed value
+        action:
+          type: SetValue
+          scope: font_panel
+          selector: ">> [role='combo box'][name='Size'] > [role=edit][name='Size']"
+          value: "{output.new_size}"
+        expect:
+          type: ElementHasText
+          scope: font_panel
+          selector: ">> [role='combo box'][name='Size'] > [role=edit][name='Size']"
+          pattern:
+            exact: "{output.new_size}"
+
+      - intent: click Back to confirm font
+        action:
+          type: Click
+          scope: notepad
+          selector: ">> [role=button][name=Back]"
+        expect:
+          type: ElementFound
+          scope: editor
+          selector: "*"
+
+  - name: save_file
+    mount: [menubar, saveas_dialog]
+    unmount: [saveas_dialog]
+    recovery:
+      handlers: [confirm_overwrite]
+    steps:
+      - intent: click File menu and wait for popup
+        action:
+          type: Click
+          scope: menubar
+          selector: "> [role='menu item'][name=File]"
+        expect:
+          type: ElementFound
+          scope: notepad
+          selector: ">> [role='menu item'][name=Save]"
+        timeout: 1s
+        retry:
+          fixed:
+            count: 10
+            delay: 0s
+
+      - intent: click Save in File menu
+        action:
+          type: Click
+          scope: notepad
+          selector: ">> [role='menu item'][name^=Save As]"
+        expect:
+          type: DialogPresent
+          scope: notepad
+
+      - intent: type filename in Save As dialog
+        action:
+          type: SetValue
+          scope: saveas_dialog
+          selector: ">> [role=edit][name='File name:']"
+          value: "{param.save_as}"
+        expect:
+          type: ElementHasText
+          scope: saveas_dialog
+          selector: ">> [role=edit][name='File name:']"
+          pattern:
+            contains: "{param.save_as}"
+
+      - intent: click Save button
+        action:
+          type: Invoke
+          scope: saveas_dialog
+          selector: ">> [role=button][name=Save]"
+        expect:
+          type: DialogAbsent
+          scope: notepad
+
+  - name: edit_more_text
+    steps:
+      - intent: append Goodbye
+        action:
+          type: TypeText
+          scope: editor
+          selector: "*"
+          text: "\nGoodbye"
+        expect:
+          type: ElementHasText
+          scope: editor
+          selector: "*"
+          pattern:
+            contains: "Goodbye"
+
+  - name: close_notepad
+    mount: [tab_list]
+    steps:
+      - intent: hover tab item
+        action:
+          type: Hover
+          scope: tab_list
+          selector: "> [role='tab item']"
+        expect:
+          type: ElementFound
+          scope: tab_list
+          selector: "> [role='tab item'] > [role=button][name^=Close]"
+
+      - intent: click title bar Close button
+        action:
+          type: Click
+          scope: tab_list
+          selector: "> [role='tab item'] > [role=button][name^=Close]"
+        expect:
+          type: ElementFound
+          scope: notepad
+          selector: ">> [role=button][name=Save]"
+
+      - intent: "click Don't Save"
+        action:
+          type: Click
+          scope: notepad
+          selector: ">> [role=button][name^=Don][name$=Save]"
+        expect:
+          type: WindowClosed
+          anchor: notepad

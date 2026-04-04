@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: control_panel_firewall_settings
+description: Open classic Control Panel, search for firewall, and navigate to Windows Defender Firewall
+
+launch:
+  exe: control.exe
+  wait_for: panel
+
+anchors:
+  panel:
+    type: Root
+    process: explorer
+    selector: "[name=Control Panel]"
+
+phases:
+  - name: search
+    mount: [panel]
+    steps:
+      - intent: wait for Control Panel to load
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: ">> [id=SearchEditBox]"
+        timeout: 10s
+
+      - intent: type firewall into the search box
+        action:
+          type: TypeText
+          scope: panel
+          selector: ">> [id=SearchEditBox]"
+          text: firewall
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: ">> [role=link][name=Windows Defender Firewall]"
+        timeout: 10s
+
+      - intent: click Windows Defender Firewall to open the settings page
+        action:
+          type: Click
+          scope: panel
+          selector: ">> [role=link][name=Windows Defender Firewall]"
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: "[name=Windows Defender Firewall]"
+        timeout: 10s
+
+  - name: read_status
+    steps:
+      - intent: extract network profile name (e.g. "Private networks")
+        action:
+          type: Extract
+          key: network_profile
+          scope: panel
+          selector: ">> [id=hubProfileText]"
+          attribute: name
+          multiple: true
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: ">> [id=hubProfileText]"
+
+      - intent: extract network connection status (e.g. "Connected")
+        action:
+          type: Extract
+          key: connection_status
+          scope: panel
+          selector: ">> [id=activeInactiveText]"
+          attribute: name
+          multiple: true
+        expect:
+          type: ElementFound
+          scope: panel
+          selector: ">> [id=activeInactiveText]"

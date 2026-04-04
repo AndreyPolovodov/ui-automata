@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_extract_text
+description: |
+  Probe workflow — if notepad is running, extract content.
+
+  No windows are opened or closed; this is a read-only probe.
+
+defaults:
+  timeout: 5s
+
+anchors:
+  notepad:
+    type: Root
+    process: notepad
+    selector: "*"
+
+outputs:
+  - name: text
+    description: 'content of the current notepad editor'
+
+phases:
+
+  - name: check_running
+    mount: [notepad]
+    precondition:
+      type: ProcessRunning
+      process: notepad
+    steps:
+      - intent: activate window in case it is minimized
+        action:
+          type: ActivateWindow
+          scope: notepad
+        expect:
+          type: WindowWithState
+          anchor: notepad
+          state: active
+
+      - intent: extract notepad text
+        action:
+          type: Extract
+          key: text
+          scope: notepad
+          selector: ">> [role=document][name='Text editor']"
+          attribute: text
+        expect:
+          type: EvalCondition
+          expr: "output.text != ''"

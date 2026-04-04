@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: settings_about
+description: |
+  Open the Windows Settings app and navigate to System > About.
+
+  Shows device specifications: CPU, RAM, storage, device name,
+  Windows edition, and OS build number.
+
+defaults:
+  timeout: 15s
+
+launch:
+  app: ms-settings
+
+anchors:
+  settings:
+    type: Root
+    process: ApplicationFrameHost
+    selector: "[name=Settings]"
+
+phases:
+
+  - name: open_system
+    mount: [settings]
+    steps:
+      - intent: wait for Settings home to load
+        action:
+          type: Invoke
+          scope: settings
+          selector: "[id=HomeButton]"
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [id=SettingsPageGroupPCSystem]"
+
+      - intent: click System
+        action:
+          type: Invoke
+          scope: settings
+          selector: ">> [id=SettingsPageGroupPCSystem]"
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [id=SettingsPageAbout_New]"
+
+  - name: open_about
+    mount: [settings]
+    steps:
+      - intent: invoke About
+        action:
+          type: Invoke
+          scope: settings
+          selector: ">> [id=SettingsPageAbout_New]"
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [name=Device Specifications]"
+        timeout: 10s
+
+      - intent: extract Windows Specifications
+        action:
+          type: Extract
+          key: windows_specification
+          scope: settings
+          selector: ">> [role=group][name~=Windows specifications panel]"
+          attribute: inner_text
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [role=group][name~=Windows specifications panel]"

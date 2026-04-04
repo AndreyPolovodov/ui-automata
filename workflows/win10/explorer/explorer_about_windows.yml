@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: explorer_about_windows
+description: |
+  Launch a new File Explorer window, then click "File > Help > About Windows".
+
+  Extract Windows version, then close the windows.
+
+launch:
+  exe: explorer.exe
+  wait: new_window
+
+anchors:
+  explorer:
+    type: Root
+    selector: "[role=window]"
+    process: explorer
+
+  about_windows:
+    type: Ephemeral
+    selector: "[role=dialog][name='About Windows']"
+
+phases:
+  - name: about_windows
+    mount: [explorer]
+    steps:
+      - intent: click File menu
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [role=button][name^=File]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=menu]"
+
+      - intent: hover Help menu item
+        action:
+          type: Hover
+          scope: explorer
+          selector: ">> [role=split button][name=Help]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=menu item][name='About Windows']"
+
+      - intent: click About Windows
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [role=menu item][name='About Windows']"
+        expect:
+          type: ForegroundIsDialog
+          scope: explorer
+
+  - name: extract_version
+    mount: [about_windows]
+    unmount: [about_windows]
+    steps:
+      - intent: extract Windows version
+        action:
+          type: Extract
+          key: windows_version
+          scope: about_windows
+          selector: "*"
+          attribute: inner_text
+        expect:
+          type: ElementFound
+          scope: about_windows
+          selector: "*"
+      - intent: close dialog
+        action:
+          type: Click
+          scope: about_windows
+          selector: "> [role=button][name=OK]"
+        expect:
+          type: DialogAbsent
+          scope: explorer
+
+  - name: close_window
+    finally: true
+    steps:
+      - intent: close window
+        action:
+          type: CloseWindow
+          scope: explorer
+        expect:
+          type: WindowClosed
+          anchor: explorer

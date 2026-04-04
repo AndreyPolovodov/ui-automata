@@ -1,0 +1,118 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: download_git
+description: |
+  Navigate to gitforwindows.org, click the Download button via UIA, and capture
+  the installer filename from Edge's Downloads panel.
+
+  Note: CDP .click() is blocked for target=_blank links — UIA Invoke is used instead.
+
+  Outputs: installer_filename — the .exe name (e.g. Git-2.53.0.2-64-bit.exe)
+
+outputs:
+  - name: installer_filename
+    description: Filename of the downloaded Git installer (from the Downloads panel tree item).
+
+defaults:
+  timeout: 15s
+
+anchors:
+  edge:
+    type: Browser
+
+  git_tab:
+    type: Tab
+    parent: edge
+
+  downloads_panel:
+    type: Stable
+    parent: edge
+    selector: ">> [role=dialog][name=Downloads]"
+
+phases:
+
+  - name: navigate
+    mount: [edge, git_tab]
+    steps:
+      - intent: navigate to gitforwindows.org
+        action:
+          type: BrowserNavigate
+          scope: git_tab
+          url: "https://gitforwindows.org"
+        expect:
+          type: TabWithAttribute
+          scope: git_tab
+          title:
+            contains: "Git for Windows"
+        timeout: 30s
+
+  - name: click_download
+    steps:
+      # CDP .click() is synthetic and does not count as a user gesture —
+      # Edge blocks the pop-up. Use UIA Click / Invoke instead.
+      - intent: click the Download button via UIA
+        action:
+          type: Invoke
+          scope: git_tab
+          selector: ">> [role=link][id=download]"
+        expect:
+          type: Always
+
+  - name: open_downloads_panel
+    steps:
+      - intent: open Downloads panel if it did not appear automatically
+        precondition:
+          type: Not
+          condition:
+            type: ElementFound
+            scope: edge
+            selector: ">> [role=dialog][name=Downloads]"
+        action:
+          type: PressKey
+          scope: edge
+          selector: "*"
+          key: "ctrl+j"
+        expect:
+          type: ElementFound
+          scope: edge
+          selector: ">> [role=dialog][name=Downloads]"
+        timeout: 3s
+
+  - name: wait_until_download_complete
+    mount: [downloads_panel]
+    steps:
+      - intent: read installer filename from the Downloads panel
+        action:
+          type: Extract
+          key: installer_filename
+          scope: downloads_panel
+          selector: ">> [role=tree item]"
+          attribute: name
+        expect:
+          type: EvalCondition
+          expr: "regex_match(output.installer_filename, '(?i)^git-.+\\\\.exe$')"
+        timeout: 1s
+        retry:
+          fixed:
+            count: 60
+            delay: 0s
+      - intent: hover on the download item
+        action:
+          type: Hover
+          scope: downloads_panel
+          selector: ">> [role=tree item]:nth(0)"
+        expect:
+          type: ElementFound
+          scope: downloads_panel
+          selector: ">> [role=tree item][name^=git]"
+      - intent: wait until the delete button appears (download complete)
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: downloads_panel
+          selector: ">> [role=tree item][name^=git] >> [role=button][name^=Delete]"
+        timeout: 3s
+        retry:
+          fixed:
+            count: 20
+            delay: 0s

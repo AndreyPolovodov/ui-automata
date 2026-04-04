@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: settings_about
+description: |
+  Open the Windows Settings app and navigate to System > About.
+
+  Shows device specifications: CPU, RAM, storage, device name,
+  Windows edition, and OS build number.
+
+defaults:
+  timeout: 10s
+
+launch:
+  app: ms-settings
+
+anchors:
+  settings:
+    type: Root
+    process: ApplicationFrameHost
+    selector: "[name=Settings]"
+
+phases:
+
+  - name: open_system
+    mount: [settings]
+    steps:
+      - intent: wait for Settings home to load
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [role=list item][name=Home]"
+
+      - intent: click System
+        action:
+          type: Invoke
+          scope: settings
+          selector: ">> [role=list item][name=System]"
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [role=breadcrumb bar item][name=System]"
+
+  - name: open_about
+    mount: [settings]
+    steps:
+      - intent: invoke About
+        timeout: 1s
+        retry:
+          fixed:
+            count: 10
+            delay: 0s
+        action:
+          type: Invoke
+          scope: settings
+          selector: ">> [role=list item][name=About]"
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [role=breadcrumb bar item][name=About]"
+
+      - intent: focus Windows Specifications
+        action:
+          type: ScrollIntoView
+          scope: settings
+          selector: ">> [role=group][name~=Windows Specifications]"
+        expect:
+          type: ElementFound
+          scope: settings
+          selector: ">> [role=group][name~=Windows Specifications]"
+
+      - intent: extract Windows Specifications
+        action:
+          type: Extract
+          key: windows_specification
+          scope: settings
+          selector: ">> [role=group][name~=Windows Specifications]"
+          attribute: inner_text
+        expect:
+          type: EvalCondition
+          expr: "output.windows_specification != ''"

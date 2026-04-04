@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: explorer_navigate
+description: |
+  Launch a new File Explorer window, then navigates to the desired location.
+
+defaults:
+  timeout: 5s
+
+params:
+  - name: address
+    default: 'C:\Program Files\'
+
+launch:
+  exe: explorer.exe
+  wait: new_window
+
+anchors:
+  explorer:
+    type: Root
+    selector: "[role=window]"
+    process: explorer
+
+  address_textbox:
+    type: Stable
+    selector: ">> [role=edit][name=Address]"
+    parent: explorer
+
+phases:
+  - name: open_explorer
+    mount: [explorer]
+    steps:
+      - intent: activate the Explorer window
+        action:
+          type: ActivateWindow
+          scope: explorer
+        expect:
+          type: WindowWithState
+          anchor: explorer
+          state: active
+      - intent: click Address tool bar
+        action:
+          type: Click
+          scope: explorer
+          selector: ">> [role=tool bar][name^=Address]"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=edit][name=Address]"
+  - name: navigate
+    mount: [address_textbox]
+    unmount: [address_textbox]
+    steps:
+      - intent: input the target address
+        action:
+          type: TypeText
+          scope: address_textbox
+          text: "{param.address}"
+          selector: "*"
+        expect:
+          type: ElementHasText
+          scope: address_textbox
+          selector: "*"
+          pattern:
+            contains: "{param.address}"
+      - intent: confirm
+        action:
+          type: PressKey
+          scope: address_textbox
+          selector: "*"
+          key: "{ENTER}"
+        expect:
+          type: ElementFound
+          scope: explorer
+          selector: ">> [role=tool bar][name^=Address]"
