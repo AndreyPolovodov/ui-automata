@@ -207,6 +207,29 @@ fn check_anchor_ref(
     }
 }
 
+/// Like `check_anchor_ref` but also verifies the anchor is currently mounted.
+/// Use for `scope:` fields in actions and conditions.
+/// Non-scope anchor refs (e.g. `anchor:` in `WindowClosed`) skip the mount check.
+fn check_scope_ref(
+    scope: &str,
+    span: &Span,
+    anchors: &HashSet<String>,
+    mounted: &HashSet<String>,
+    path: &str,
+    field: &str,
+    diags: &mut Vec<LintDiag>,
+) {
+    if !anchors.contains(scope) {
+        check_anchor_ref(scope, span, anchors, path, field, diags);
+    } else if !mounted.contains(scope) {
+        diags.push(diag_at(
+            span,
+            &format!("{path}.{field}"),
+            format!("anchor '{scope}' is not mounted in this phase — add it to 'mount:'"),
+        ));
+    }
+}
+
 // ── Workflow-level ────────────────────────────────────────────────────────────
 
 fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
@@ -299,22 +322,42 @@ fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
         })
         .unwrap_or_default();
 
-    // Lint phases.
+    // Lint phases, tracking which anchors are currently mounted.
     if let Some(phases_seq) = get(v, "phases").and_then(|p| p.data.as_sequence()) {
+        let mut mounted: HashSet<String> = HashSet::new();
         for (i, phase) in phases_seq.iter().enumerate() {
+            // Apply mount: before linting this phase's steps.
+            if let Some(seq) = get(phase, "mount").and_then(|m| m.data.as_sequence()) {
+                for item in seq {
+                    if let Some(n) = item.data.as_str() {
+                        mounted.insert(n.to_owned());
+                    }
+                }
+            }
             lint_phase(
                 phase,
                 &format!("phases[{i}]"),
                 &anchors,
+                &mounted,
                 &params,
                 &phase_names,
                 &handler_names,
                 diags,
             );
+            // Apply unmount: after linting.
+            if let Some(seq) = get(phase, "unmount").and_then(|u| u.data.as_sequence()) {
+                for item in seq {
+                    if let Some(n) = item.data.as_str() {
+                        mounted.remove(n);
+                    }
+                }
+            }
         }
     }
 
     // Lint recovery handlers.
+    // Handlers fire from within phase execution, so can reference any declared anchor.
+    // Pass anchors as mounted to suppress false "not mounted" diagnostics.
     if let Some(handlers_map) = get(v, "recovery_handlers").and_then(|r| r.data.as_mapping()) {
         for (key, handler_v) in handlers_map {
             if let Some(name) = key.data.as_str() {
@@ -323,6 +366,7 @@ fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
                     lint_condition(
                         trigger,
                         &format!("{path}.trigger"),
+                        &anchors,
                         &anchors,
                         &params,
                         diags,
@@ -335,6 +379,7 @@ fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
                         lint_action(
                             action,
                             &format!("{path}.actions[{j}]"),
+                            &anchors,
                             &anchors,
                             &params,
                             diags,
@@ -400,6 +445,7 @@ fn lint_phase(
     v: &MarkedYaml<'_>,
     path: &str,
     anchors: &HashSet<String>,
+    mounted: &HashSet<String>,
     params: &HashSet<String>,
     phase_names: &HashSet<String>,
     handler_names: &HashSet<String>,
@@ -422,7 +468,7 @@ fn lint_phase(
     } else if has_subflow {
         lint_subflow_phase(v, path, params, diags);
     } else {
-        lint_action_phase(v, path, anchors, params, handler_names, diags);
+        lint_action_phase(v, path, anchors, mounted, params, handler_names, diags);
     }
 }
 
@@ -488,6 +534,7 @@ fn lint_action_phase(
     v: &MarkedYaml<'_>,
     path: &str,
     anchors: &HashSet<String>,
+    mounted: &HashSet<String>,
     params: &HashSet<String>,
     handler_names: &HashSet<String>,
     diags: &mut Vec<LintDiag>,
@@ -541,7 +588,14 @@ fn lint_action_phase(
         None => diags.push(diag_at(&v.span, path, "missing required field 'steps'")),
         Some(steps) => {
             for (i, step) in steps.iter().enumerate() {
-                lint_step(step, &format!("{path}.steps[{i}]"), anchors, params, diags);
+                lint_step(
+                    step,
+                    &format!("{path}.steps[{i}]"),
+                    anchors,
+                    mounted,
+                    params,
+                    diags,
+                );
             }
         }
     }
@@ -553,25 +607,51 @@ fn lint_step(
     v: &MarkedYaml<'_>,
     path: &str,
     anchors: &HashSet<String>,
+    mounted: &HashSet<String>,
     params: &HashSet<String>,
     diags: &mut Vec<LintDiag>,
 ) {
     if get(v, "intent").is_none() {
         diags.push(diag_at(&v.span, path, "missing required field 'intent'"));
     }
+    if let Some(precondition) = get(v, "precondition") {
+        lint_condition(
+            precondition,
+            &format!("{path}.precondition"),
+            anchors,
+            mounted,
+            params,
+            diags,
+        );
+    }
     match get(v, "action") {
         None => diags.push(diag_at(&v.span, path, "missing required field 'action'")),
-        Some(action) => lint_action(action, &format!("{path}.action"), anchors, params, diags),
+        Some(action) => lint_action(
+            action,
+            &format!("{path}.action"),
+            anchors,
+            mounted,
+            params,
+            diags,
+        ),
     }
     match get(v, "expect") {
         None => diags.push(diag_at(&v.span, path, "missing required field 'expect'")),
-        Some(expect) => lint_condition(expect, &format!("{path}.expect"), anchors, params, diags),
+        Some(expect) => lint_condition(
+            expect,
+            &format!("{path}.expect"),
+            anchors,
+            mounted,
+            params,
+            diags,
+        ),
     }
     if let Some(fallback) = get(v, "fallback") {
         lint_action(
             fallback,
             &format!("{path}.fallback"),
             anchors,
+            mounted,
             params,
             diags,
         );
@@ -579,9 +659,12 @@ fn lint_step(
     if let Some(on_failure) = get(v, "on_failure") {
         lint_on_failure(on_failure, &format!("{path}.on_failure"), diags);
     }
+    if let Some(on_success) = get(v, "on_success") {
+        lint_on_success(on_success, &format!("{path}.on_success"), diags);
+    }
 }
 
-// ── OnFailure ─────────────────────────────────────────────────────────────────
+// ── OnFailure / OnSuccess ─────────────────────────────────────────────────────
 
 fn lint_on_failure(v: &MarkedYaml<'_>, path: &str, diags: &mut Vec<LintDiag>) {
     match &v.data {
@@ -598,6 +681,27 @@ fn lint_on_failure(v: &MarkedYaml<'_>, path: &str, diags: &mut Vec<LintDiag>) {
             &v.span,
             path,
             "on_failure must be 'abort' or 'continue'",
+        )),
+    }
+}
+
+fn lint_on_success(v: &MarkedYaml<'_>, path: &str, diags: &mut Vec<LintDiag>) {
+    match &v.data {
+        saphyr::YamlData::Value(saphyr::Scalar::String(s)) => {
+            if !matches!(s.as_ref(), "continue" | "return_phase") {
+                diags.push(diag_at(
+                    &v.span,
+                    path,
+                    format!(
+                        "unknown on_success value '{s}' — expected 'continue' or 'return_phase'"
+                    ),
+                ));
+            }
+        }
+        _ => diags.push(diag_at(
+            &v.span,
+            path,
+            "on_success must be 'continue' or 'return_phase'",
         )),
     }
 }
@@ -655,6 +759,7 @@ fn lint_action(
     v: &MarkedYaml<'_>,
     path: &str,
     anchors: &HashSet<String>,
+    mounted: &HashSet<String>,
     params: &HashSet<String>,
     diags: &mut Vec<LintDiag>,
 ) {
@@ -679,7 +784,7 @@ fn lint_action(
 
     if ACTIONS_SCOPE_SELECTOR.contains(&type_str) {
         if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-            check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+            check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
         }
         require_str(v, "selector", path, diags);
         check_selector(v, "selector", path, diags);
@@ -687,7 +792,7 @@ fn lint_action(
 
     if ACTIONS_SCOPE_ONLY.contains(&type_str) {
         if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-            check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+            check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
         }
     }
 
@@ -725,6 +830,17 @@ fn lint_action(
         }
         "Extract" => {
             require_str(v, "key", path, diags);
+            if let Some((attr, span)) = get_str(v, "attribute") {
+                if !matches!(attr, "name" | "text" | "inner_text") {
+                    diags.push(diag_at(
+                        &span,
+                        &format!("{path}.attribute"),
+                        format!(
+                            "unknown attribute '{attr}' — expected 'name', 'text', or 'inner_text'"
+                        ),
+                    ));
+                }
+            }
         }
         "Eval" => {
             require_str(v, "key", path, diags);
@@ -768,13 +884,22 @@ fn lint_action(
             if get(v, "y_pct").is_none() {
                 diags.push(diag_at(&v.span, path, "missing required field 'y_pct'"));
             }
-            if get(v, "kind").is_none() {
-                diags.push(diag_at(&v.span, path, "missing required field 'kind'"));
+            match get_str(v, "kind") {
+                None => diags.push(diag_at(&v.span, path, "missing required field 'kind'")),
+                Some((kind, span)) => {
+                    if !matches!(kind, "left" | "double" | "triple" | "right" | "middle") {
+                        diags.push(diag_at(
+                            &span,
+                            &format!("{path}.kind"),
+                            format!("unknown click kind '{kind}' — expected 'left', 'double', 'triple', 'right', or 'middle'"),
+                        ));
+                    }
+                }
             }
         }
         "BrowserNavigate" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             if let Some((s, span)) = require_str(v, "url", path, diags) {
                 check_interpolation(s, &span, &format!("{path}.url"), params, diags);
@@ -782,7 +907,7 @@ fn lint_action(
         }
         "BrowserEval" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             if let Some((s, span)) = require_str(v, "expr", path, diags) {
                 check_interpolation(s, &span, &format!("{path}.expr"), params, diags);
@@ -823,6 +948,7 @@ fn lint_condition(
     v: &MarkedYaml<'_>,
     path: &str,
     anchors: &HashSet<String>,
+    mounted: &HashSet<String>,
     params: &HashSet<String>,
     diags: &mut Vec<LintDiag>,
 ) {
@@ -847,14 +973,14 @@ fn lint_condition(
     match type_str {
         "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             require_str(v, "selector", path, diags);
             check_selector(v, "selector", path, diags);
         }
         "ElementHasText" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             require_str(v, "selector", path, diags);
             check_selector(v, "selector", path, diags);
@@ -874,22 +1000,40 @@ fn lint_condition(
                     "WindowWithAttribute requires at least one of: title, automation_id, pid",
                 ));
             }
-            check_text_match_field(v, "title", path, diags);
+            check_title_match_field(v, "title", path, diags);
         }
         "ProcessRunning" => {
             require_str(v, "process", path, diags);
         }
         "WindowClosed" => {
-            require_str(v, "anchor", path, diags);
+            if let Some((anchor, span)) = require_str(v, "anchor", path, diags) {
+                check_anchor_ref(anchor, &span, anchors, path, "anchor", diags);
+            }
         }
         "WindowWithState" => {
-            require_str(v, "anchor", path, diags);
-            require_str(v, "state", path, diags);
-        }
-        "DialogPresent" | "DialogAbsent" | "ForegroundIsDialog" => {
-            if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+            if let Some((anchor, span)) = require_str(v, "anchor", path, diags) {
+                check_anchor_ref(anchor, &span, anchors, path, "anchor", diags);
             }
+            if let Some((state, span)) = require_str(v, "state", path, diags) {
+                if !matches!(state, "active" | "visible") {
+                    diags.push(diag_at(
+                        &span,
+                        &format!("{path}.state"),
+                        format!("unknown state '{state}' — expected 'active' or 'visible'"),
+                    ));
+                }
+            }
+        }
+        "DialogPresent" | "DialogAbsent" => {
+            if let Some((scope, span)) = require_str(v, "scope", path, diags) {
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
+            }
+        }
+        "ForegroundIsDialog" => {
+            if let Some((scope, span)) = require_str(v, "scope", path, diags) {
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
+            }
+            check_title_match_field(v, "title", path, diags);
         }
         "FileExists" => {
             if let Some((s, span)) = require_str(v, "path", path, diags) {
@@ -908,6 +1052,7 @@ fn lint_condition(
                         cond,
                         &format!("{path}.conditions[{i}]"),
                         anchors,
+                        mounted,
                         params,
                         diags,
                     );
@@ -916,13 +1061,18 @@ fn lint_condition(
         },
         "Not" => match get(v, "condition") {
             None => diags.push(diag_at(&v.span, path, "missing required field 'condition'")),
-            Some(cond) => {
-                lint_condition(cond, &format!("{path}.condition"), anchors, params, diags)
-            }
+            Some(cond) => lint_condition(
+                cond,
+                &format!("{path}.condition"),
+                anchors,
+                mounted,
+                params,
+                diags,
+            ),
         },
         "TabWithAttribute" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             let has_title = get(v, "title").is_some();
             let has_url = get(v, "url").is_some();
@@ -938,7 +1088,7 @@ fn lint_condition(
         }
         "TabWithState" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_anchor_ref(scope, &span, anchors, path, "scope", diags);
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             require_str(v, "expr", path, diags);
         }
@@ -955,7 +1105,7 @@ fn lint_condition(
     }
 }
 
-// ── TextMatch ─────────────────────────────────────────────────────────────────
+// ── TextMatch / TitleMatch ────────────────────────────────────────────────────
 
 /// Lint an optional TextMatch field on `parent`. If the field is present, it
 /// must be a map with at least one recognised TextMatch key.
@@ -993,6 +1143,40 @@ fn lint_text_match(v: &MarkedYaml<'_>, path: &str, diags: &mut Vec<LintDiag>) {
                 "TextMatch must specify exactly one of: exact, contains, starts_with, regex",
             ));
         }
+        _ => {}
+    }
+}
+
+/// Lint an optional TitleMatch field on `parent`. TitleMatch is a subset of
+/// TextMatch: only `exact`, `contains`, `starts_with` are valid (no `regex` or `non_empty`).
+fn check_title_match_field(
+    parent: &MarkedYaml<'_>,
+    field: &str,
+    path: &str,
+    diags: &mut Vec<LintDiag>,
+) {
+    if let Some(node) = get(parent, field) {
+        lint_title_match(node, &format!("{path}.{field}"), diags);
+    }
+}
+
+fn lint_title_match(v: &MarkedYaml<'_>, path: &str, diags: &mut Vec<LintDiag>) {
+    let pattern_fields = ["exact", "contains", "starts_with"];
+    let set_count = pattern_fields
+        .iter()
+        .filter(|&&f| get(v, f).is_some())
+        .count();
+    match set_count {
+        0 => diags.push(diag_at(
+            &v.span,
+            path,
+            "TitleMatch must specify at least one of: exact, contains, starts_with",
+        )),
+        2.. => diags.push(diag_at(
+            &v.span,
+            path,
+            "TitleMatch must specify exactly one of: exact, contains, starts_with",
+        )),
         _ => {}
     }
 }
@@ -1393,6 +1577,7 @@ anchors:
   tab: { type: Tab, parent: browser }
 phases:
   - name: main
+    mount: [browser, tab]
     steps:
       - intent: click via js
         action:
@@ -1449,6 +1634,7 @@ anchors:
   tab: { type: Tab, parent: browser }
 phases:
   - name: main
+    mount: [browser, tab]
     steps:
       - intent: wait for tab
         action: { type: NoOp }
@@ -1475,6 +1661,303 @@ phases:
         expect: { type: WindowWithAttribute, title: "My App" }
 "#;
         let msgs = diag_messages(raw);
-        assert_contains(&msgs, "TextMatch must specify at least one of");
+        assert_contains(&msgs, "TitleMatch must specify at least one of");
+    }
+
+    #[test]
+    fn scope_used_before_mount_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    steps:
+      - intent: click something
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "not mounted in this phase");
+    }
+
+    #[test]
+    fn scope_mounted_no_diag() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: click something
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+"#;
+        assert!(lint(raw).is_empty());
+    }
+
+    #[test]
+    fn window_closed_unknown_anchor_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: wait for close
+        action: { type: NoOp }
+        expect: { type: WindowClosed, anchor: nonexistent }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown anchor 'nonexistent'");
+    }
+
+    #[test]
+    fn window_with_state_unknown_anchor_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: wait for active
+        action: { type: NoOp }
+        expect: { type: WindowWithState, anchor: ghost, state: active }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown anchor 'ghost'");
+    }
+
+    #[test]
+    fn window_with_state_invalid_state_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: wait for state
+        action: { type: NoOp }
+        expect: { type: WindowWithState, anchor: app, state: focused }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown state 'focused'");
+    }
+
+    #[test]
+    fn precondition_linted() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: conditional click
+        precondition: { type: ElementFound, scope: app, selector: ">> [role=button]" }
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+"#;
+        assert!(lint(raw).is_empty());
+    }
+
+    #[test]
+    fn precondition_unknown_condition_type_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: conditional click
+        precondition: { type: Bogus, scope: app }
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown condition type 'Bogus'");
+    }
+
+    #[test]
+    fn on_success_invalid_value_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: click
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+        on_success: break
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown on_success value 'break'");
+    }
+
+    #[test]
+    fn on_success_valid_return_phase_no_diag() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: click
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+        on_success: return_phase
+"#;
+        assert!(lint(raw).is_empty());
+    }
+
+    #[test]
+    fn foreground_is_dialog_title_validated() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: wait for dialog
+        action: { type: NoOp }
+        expect:
+          type: ForegroundIsDialog
+          scope: app
+          title: "plain string not a TitleMatch"
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "TitleMatch must specify at least one of");
+    }
+
+    #[test]
+    fn click_at_invalid_kind_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: click at position
+        action:
+          type: ClickAt
+          scope: app
+          selector: ">> [role=button]"
+          x_pct: 0.5
+          y_pct: 0.5
+          kind: center
+        expect: { type: Always }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown click kind 'center'");
+    }
+
+    #[test]
+    fn click_at_valid_kind_no_diag() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: click at position
+        action:
+          type: ClickAt
+          scope: app
+          selector: ">> [role=button]"
+          x_pct: 0.5
+          y_pct: 0.5
+          kind: right
+        expect: { type: Always }
+"#;
+        assert!(lint(raw).is_empty());
+    }
+
+    #[test]
+    fn extract_invalid_attribute_reported() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: extract something
+        action:
+          type: Extract
+          scope: app
+          selector: ">> [role=label]"
+          key: result
+          attribute: label
+        expect: { type: Always }
+"#;
+        let msgs = diag_messages(raw);
+        assert_contains(&msgs, "unknown attribute 'label'");
+    }
+
+    #[test]
+    fn extract_valid_attribute_no_diag() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: extract something
+        action:
+          type: Extract
+          scope: app
+          selector: ">> [role=label]"
+          key: result
+          attribute: inner_text
+        expect: { type: Always }
+"#;
+        assert!(lint(raw).is_empty());
+    }
+
+    #[test]
+    fn scope_mounted_in_prior_phase_no_diag() {
+        let raw = r#"
+name: t
+anchors:
+  app: { type: Root, selector: "[name~=App]" }
+phases:
+  - name: open
+    mount: [app]
+    steps:
+      - intent: activate app
+        action: { type: ActivateWindow, scope: app }
+        expect: { type: Always }
+  - name: interact
+    steps:
+      - intent: click something
+        action: { type: Click, scope: app, selector: ">> [role=button]" }
+        expect: { type: Always }
+"#;
+        assert!(lint(raw).is_empty());
     }
 }

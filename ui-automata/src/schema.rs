@@ -34,7 +34,7 @@ impl JsonSchema for SelectorPath {
     fn json_schema(_sg: &mut SchemaGenerator) -> Schema {
         json_schema!({
             "type": "string",
-            "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance"
+            "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance"
         })
     }
 }
@@ -107,19 +107,17 @@ impl JsonSchema for Condition {
             "additionalProperties": false
         }));
 
-        // WindowWithAttribute — title fields + automation_id + pid + process
+        // WindowWithAttribute — title (TitleMatch) + automation_id + pid + process
         variants.push(json!({
             "type": "object",
-            "description": "True when any open application window matches all specified attributes. Requires at least one of: exact, contains, starts_with, automation_id, pid.",
+            "description": "True when any open application window matches all specified attributes. Requires at least one of: title, automation_id, pid. `process` is an optional filter.",
             "required": ["type"],
             "properties": {
                 "type": { "const": "WindowWithAttribute" },
-                "exact":          { "type": "string", "description": "Window title must match exactly." },
-                "contains":       { "type": "string", "description": "Window title must contain this substring." },
-                "starts_with":    { "type": "string", "description": "Window title must start with this string." },
-                "automation_id":  { "type": "string", "description": "UIA AutomationId / AXIdentifier must match exactly." },
+                "title":          title_match.clone(),
+                "automation_id":  { "type": "string", "description": "UIA AutomationId must match exactly." },
                 "pid":            { "type": "integer", "minimum": 0, "description": "Process ID to match exactly." },
-                "process":        { "type": "string", "description": "Process name without .exe (case-insensitive)." }
+                "process":        { "type": "string", "description": "Optional: restrict to windows belonging to this process (name without .exe, case-insensitive)." }
             },
             "additionalProperties": false
         }));
@@ -147,7 +145,7 @@ impl JsonSchema for Condition {
                 "state": {
                     "type": "string",
                     "enum": ["active", "visible"],
-                    "description": "active: window is the OS foreground window. visible: window is visible on screen (not minimized or hidden)."
+                    "description": "active: a window belonging to the same process as the anchor is the OS foreground window. visible: the anchor's window is visible on screen (not minimized or hidden)."
                 }
             },
             "additionalProperties": false
@@ -156,7 +154,7 @@ impl JsonSchema for Condition {
         // WindowClosed — uses `anchor` not `scope`
         variants.push(json!({
             "type": "object",
-            "description": "True when the anchor's window is no longer present. If the anchor was resolved with a PID, checks at process level; otherwise attempts re-resolution and treats failure as closed.",
+            "description": "True when the anchor's window is no longer present. HWND-locked anchors check that specific window handle; PID-only anchors check for any window of that process; unresolved anchors treat re-resolution failure as closed.",
             "required": ["type", "anchor"],
             "properties": {
                 "type": { "const": "WindowClosed" },
@@ -169,11 +167,11 @@ impl JsonSchema for Condition {
         for (type_name, desc) in &[
             (
                 "DialogPresent",
-                "True when a direct child of the scope element has control_type=dialog.",
+                "True when a direct child of the scope anchor's window has role=\"dialog\".",
             ),
             (
                 "DialogAbsent",
-                "True when no direct child of the scope element has control_type=dialog.",
+                "True when no direct child of the scope anchor's window has role=\"dialog\".",
             ),
         ] {
             variants.push(json!({
@@ -188,10 +186,10 @@ impl JsonSchema for Condition {
             }));
         }
 
-        // ForegroundIsDialog — optional nested `title: TitleMatch`
+        // ForegroundIsDialog — scope is parsed but ignored at runtime; only fg window role/title matter
         variants.push(json!({
             "type": "object",
-            "description": "True when the OS foreground window is a dialog belonging to the same process as scope. Optionally also checks the dialog title.",
+            "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title. `scope` is required by convention but not used in evaluation.",
             "required": ["type", "scope"],
             "properties": {
                 "type": { "const": "ForegroundIsDialog" },
@@ -224,10 +222,22 @@ impl JsonSchema for Condition {
             "additionalProperties": false
         }));
 
+        // FileExists — checks whether a path exists on disk
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the file at `path` exists on disk. `path` supports `{output.*}` substitution.",
+            "required": ["type", "path"],
+            "properties": {
+                "type": { "const": "FileExists" },
+                "path": { "type": "string", "description": "File path to check. Supports `{output.*}` substitution." }
+            },
+            "additionalProperties": false
+        }));
+
         // Always — no fields required
         variants.push(json!({
             "type": "object",
-            "description": "Always evaluates to true immediately. Use as `expect` on steps where success is guaranteed by the action (e.g. Capture, NoOp).",
+            "description": "Always evaluates to true immediately. Use as `expect` on steps where success is guaranteed by the action (e.g. Eval, WriteOutput, NoOp).",
             "required": ["type"],
             "properties": {
                 "type": { "const": "Always" }
@@ -284,15 +294,15 @@ impl JsonSchema for Condition {
             "additionalProperties": false
         }));
 
-        // TabWithState — evaluates a JS expression in a browser tab
+        // TabWithState — evaluates a JS expression in a browser tab; true only when result == "true"
         variants.push(json!({
             "type": "object",
-            "description": "True when the JS expression `expr` evaluates to a truthy value in the browser tab anchored to `scope`. Use to wait for tab readiness, e.g. `document.readyState === 'complete'`.",
+            "description": "True when the JS expression `expr` evaluates to the string \"true\" in the browser tab anchored to `scope`. The expression must return a boolean, e.g. `document.readyState === 'complete'`.",
             "required": ["type", "scope", "expr"],
             "properties": {
                 "type": { "const": "TabWithState" },
                 "scope": { "type": "string", "description": "Name of a mounted Tab anchor." },
-                "expr": { "type": "string", "description": "JS expression to evaluate in the tab. Returns true when the result is truthy." }
+                "expr": { "type": "string", "description": "JS expression to evaluate in the tab. Must return a boolean — only the string \"true\" is treated as passing." }
             },
             "additionalProperties": false
         }));
@@ -314,7 +324,7 @@ impl JsonSchema for RetryPolicy {
             "oneOf": [
                 {
                     "const": "none",
-                    "description": "No retries. The step fails immediately when the expect condition times out."
+                    "description": "On a step: inherit the workflow-level `defaults.retry` policy. On `defaults.retry` itself: disable retries — steps fail immediately on timeout."
                 },
                 {
                     "const": "with_recovery",

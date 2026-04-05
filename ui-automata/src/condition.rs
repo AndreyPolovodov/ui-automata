@@ -129,7 +129,7 @@ pub const EXEC_EXIT_CODE_KEY: &str = "__exec_exit_code__";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowState {
-    /// The window is currently the OS foreground window (has keyboard focus).
+    /// A window belonging to the same process as the anchor is the OS foreground window.
     Active,
     /// The window is visible on screen — not minimized or hidden.
     Visible,
@@ -167,8 +167,8 @@ pub enum Condition {
 
     /// Any application window matches the given attribute filters.
     /// YAML: `type: WindowWithAttribute` + at least one of:
-    ///   - flat title fields: `exact`, `contains`, `starts_with`
-    ///   - `automation_id: <string>` (exact match on UIA AutomationId / AXIdentifier)
+    ///   - `title`: `TitleMatch` against the window's name
+    ///   - `automation_id: <string>` (exact match on UIA AutomationId)
     ///   - `pid: <u32>` (exact process ID match)
     /// Optional `process: <name>` restricts to a specific process (case-insensitive, no .exe).
     WindowWithAttribute {
@@ -185,9 +185,9 @@ pub enum Condition {
         process: String,
     },
     /// True when the window anchored to `anchor` is no longer open.
-    /// If the anchor was mounted with a PID (`AnchorDef::session_pid`), the
-    /// check is done at the process level (no window for that PID exists).
-    /// Otherwise it falls back to attempting re-resolution of the anchor.
+    /// HWND-locked anchors check that specific window handle; PID-only anchors
+    /// check for any window of that process; unresolved anchors treat re-resolution
+    /// failure as closed.
     WindowClosed {
         anchor: String,
     },
@@ -215,11 +215,11 @@ pub enum Condition {
     },
 
     /// Always evaluates to true immediately. Use as `expect` on steps where
-    /// success is guaranteed by the action itself (e.g. `Capture`, `NoOp`).
+    /// success is guaranteed by the action itself (e.g. `Eval`, `WriteOutput`, `NoOp`).
     Always,
 
     /// True when the most recent `Exec` action exited with code 0.
-    /// Fails (step times out) if the process exited non-zero.
+    /// Reads the exit code stored in locals under `__exec_exit_code__` by the `Exec` action.
     ExecSucceeded,
 
     /// Evaluates a boolean expression against the current output, locals, and params.
@@ -240,8 +240,8 @@ pub enum Condition {
         url: Option<TextMatch>,
     },
 
-    /// True when the JS expression `expr` evaluates to a truthy value in the browser tab `scope`.
-    /// YAML: `type: TabWithState` + `scope` (Tab anchor) + `expr` (JS expression string).
+    /// True when the JS expression `expr` evaluates to the string `"true"` in the browser tab `scope`.
+    /// The expression must return a boolean — only the string `"true"` is treated as passing.
     /// Example: `expr: "document.readyState === 'complete'"`
     TabWithState {
         scope: String,

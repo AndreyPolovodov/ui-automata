@@ -2,18 +2,33 @@
 ///
 /// Each element becomes an absolutely-positioned div with a black border,
 /// its name centred inside, font sized to fit.
-///
-/// Usage:  ui-x-ray <window title>
-/// Output: <window_title>.html
 
 #[cfg(not(target_os = "windows"))]
 fn main() {}
 
 #[cfg(target_os = "windows")]
+#[derive(clap::Parser)]
+#[command(about = "Render a window's UIA element tree as an HTML overlay")]
+struct Args {
+    /// Window handle (hex: 0x1a2b3c or decimal). Takes priority over --title.
+    #[arg(long)]
+    hwnd: Option<String>,
+
+    /// Window title (exact match). Used when --hwnd is not supplied.
+    #[arg(long, short)]
+    title: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
 fn main() {
-    let title: String = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
-    if title.is_empty() {
-        eprintln!("Usage: x-ray <window title>");
+    use clap::Parser;
+    let args = Args::parse();
+
+    let hwnd = args.hwnd.as_deref().map(parse_hwnd);
+    let title = args.title.clone();
+
+    if hwnd.is_none() && title.as_ref().map_or(true, |t| t.is_empty()) {
+        eprintln!("error: supply --hwnd <handle> or --title <title>");
         std::process::exit(1);
     }
 
@@ -21,19 +36,26 @@ fn main() {
 
     let tree = match automata_windows::build_element_tree(
         None,
-        Some(&title),
+        title.as_deref(),
         None,
         None,
-        None,
+        hwnd,
         usize::MAX,
         None,
     ) {
         Ok(t) => t,
-        Err(_) => {
-            eprintln!("Window not found: {title:?}");
+        Err(e) => {
+            eprintln!("Window not found: {e}");
             std::process::exit(1);
         }
     };
+
+    let label = args
+        .hwnd
+        .as_deref()
+        .map(|h| h.to_string())
+        .or(title)
+        .unwrap_or_else(|| "window".to_string());
 
     let offset_x = tree.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
     let offset_y = tree.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
@@ -48,7 +70,7 @@ fn main() {
 <html>
 <head>
 <meta charset="utf-8">
-<title>{title}</title>
+<title>{label}</title>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{ background: #f5f5f5; }}
@@ -81,7 +103,7 @@ fn main() {
 "#,
     );
 
-    let filename = title
+    let filename = label
         .chars()
         .map(|c| {
             if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
@@ -95,6 +117,19 @@ fn main() {
 
     std::fs::write(&filename, &html).expect("Failed to write file");
     eprintln!("Written to {filename}");
+}
+
+#[cfg(target_os = "windows")]
+fn parse_hwnd(s: &str) -> u64 {
+    let result = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u64::from_str_radix(hex, 16)
+    } else {
+        s.parse::<u64>()
+    };
+    result.unwrap_or_else(|_| {
+        eprintln!("Invalid hwnd: {s:?}");
+        std::process::exit(1);
+    })
 }
 
 #[cfg(target_os = "windows")]

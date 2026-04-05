@@ -84,7 +84,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -106,7 +106,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -128,7 +128,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -150,7 +150,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -175,7 +175,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -208,7 +208,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "text": {
@@ -237,7 +237,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -260,7 +260,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -275,14 +275,14 @@
           ]
         },
         {
-          "description": "Activate an element via UIA `IInvokePattern::Invoke()`.\n\nUnlike `Click`, `Invoke` does not require a valid bounding rect, so it\nworks on elements that are scrolled out of view (bounds `(0,0,1,1)`).\nFalls back to `Click` when the element does not support `InvokePattern`.\nPrefer this over `Click` + `ScrollIntoView` for items in WinUI/UWP\nscrollable lists where mouse-wheel scrolling causes elastic snap-back.",
+          "description": "Activate an element via UIA `IInvokePattern::Invoke()`.\n\nUnlike `Click`, `Invoke` does not require a valid bounding rect, so it\nworks on elements that are scrolled out of view (bounds `(0,0,1,1)`).\nAlso tries `SelectionItemPattern` when `InvokePattern` is unavailable.\nReturns an error if neither pattern is supported — does not fall back to\n`Click`. Prefer this over `Click` + `ScrollIntoView` for items in\nWinUI/UWP scrollable lists where mouse-wheel scrolling causes snap-back.",
           "type": "object",
           "properties": {
             "scope": {
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -355,7 +355,7 @@
               "type": "string"
             },
             "selector": {
-              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = \"*\" | BareRole? [attr Op value]* [:nth(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | control_type\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                              root match by title substring\n  \">> [role=button][name=Close]\"                 any descendant button\n  \">> [role='title bar'] > [role=button]\"         child of a descendant\n  \"ToolBar[name=Main] > Group:nth(1)\"             second Group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"       starts/ends-with for special chars\n  \"*\"                                             any element; combine with process: filter\n\nExamples with ascension:\n  \">> [role=button][name=Performance]:parent\"           container of Performance\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
               "type": "string"
             },
             "type": {
@@ -545,7 +545,7 @@
           ]
         },
         {
-          "description": "Spawn an external process and wait for it to exit.\nFails if the exit code is non-zero.\n`{output.*}` tokens in `command` and `args` are substituted before execution.",
+          "description": "Spawn an external process and wait for it to exit.\nStores the exit code as a string in locals under `__exec_exit_code__`.\nFails if the exit code is non-zero — use `on_failure: continue` to suppress.\nUse `ExecSucceeded` as the `expect` condition to detect success without failing the step.\n`{output.*}` and `{param.*}` tokens in `command` and `args` are substituted before execution.",
           "type": "object",
           "properties": {
             "args": {
@@ -600,7 +600,7 @@
           ]
         },
         {
-          "description": "Navigate the browser tab anchored to `scope` to `url`.\nPolls `document.readyState` until `\"complete\"` before reporting success.\n`scope` must name a `Tab` anchor.",
+          "description": "Navigate the browser tab anchored to `scope` to `url`.\nPolls `document.readyState` until `\"complete\"` with a hardcoded 30s deadline\n(independent of the step's `timeout:`). `scope` must name a `Tab` anchor.",
           "type": "object",
           "properties": {
             "scope": {
@@ -669,7 +669,7 @@
           "const": "Stable"
         },
         {
-          "description": "Stored at runtime via a `Capture` action. Released when the phase that created it exits.",
+          "description": "Short-lived anchor declared in a phase's `mount` list. Released when the phase exits.",
           "type": "string",
           "const": "Ephemeral"
         },
@@ -679,7 +679,7 @@
           "const": "Browser"
         },
         {
-          "description": "A specific browser tab. `parent` must name a `Browser` anchor.\n`blank: true` — open a new blank tab (or reuse an existing New Tab page);\nnavigate via a `BrowserNavigate` action. Closed on unmount.\nOmit `blank` — attach to an existing tab matched by `selector`. Left open on unmount.",
+          "description": "A specific browser tab. `parent` must name a `Browser` anchor.\nOmit `selector` (or use `\"*\"`) — open a new blank tab (or reuse an existing New Tab page);\nnavigate via a `BrowserNavigate` action. Closed on unmount.\nSet `selector` — attach to an existing tab matched by title/url. Left open on unmount.",
           "type": "string",
           "const": "Tab"
         }
@@ -818,19 +818,11 @@
           ]
         },
         {
-          "description": "True when any open application window matches all specified attributes. Requires at least one of: exact, contains, starts_with, automation_id, pid.",
+          "description": "True when any open application window matches all specified attributes. Requires at least one of: title, automation_id, pid. `process` is an optional filter.",
           "type": "object",
           "properties": {
             "automation_id": {
-              "description": "UIA AutomationId / AXIdentifier must match exactly.",
-              "type": "string"
-            },
-            "contains": {
-              "description": "Window title must contain this substring.",
-              "type": "string"
-            },
-            "exact": {
-              "description": "Window title must match exactly.",
+              "description": "UIA AutomationId must match exactly.",
               "type": "string"
             },
             "pid": {
@@ -839,12 +831,11 @@
               "minimum": 0
             },
             "process": {
-              "description": "Process name without .exe (case-insensitive).",
+              "description": "Optional: restrict to windows belonging to this process (name without .exe, case-insensitive).",
               "type": "string"
             },
-            "starts_with": {
-              "description": "Window title must start with this string.",
-              "type": "string"
+            "title": {
+              "$ref": "#/$defs/TitleMatch"
             },
             "type": {
               "const": "WindowWithAttribute"
@@ -882,7 +873,7 @@
               "type": "string"
             },
             "state": {
-              "description": "active: window is the OS foreground window. visible: window is visible on screen (not minimized or hidden).",
+              "description": "active: a window belonging to the same process as the anchor is the OS foreground window. visible: the anchor's window is visible on screen (not minimized or hidden).",
               "type": "string",
               "enum": [
                 "active",
@@ -901,7 +892,7 @@
           ]
         },
         {
-          "description": "True when the anchor's window is no longer present. If the anchor was resolved with a PID, checks at process level; otherwise attempts re-resolution and treats failure as closed.",
+          "description": "True when the anchor's window is no longer present. HWND-locked anchors check that specific window handle; PID-only anchors check for any window of that process; unresolved anchors treat re-resolution failure as closed.",
           "type": "object",
           "properties": {
             "anchor": {
@@ -919,7 +910,7 @@
           ]
         },
         {
-          "description": "True when a direct child of the scope element has control_type=dialog.",
+          "description": "True when a direct child of the scope anchor's window has role=\"dialog\".",
           "type": "object",
           "properties": {
             "scope": {
@@ -937,7 +928,7 @@
           ]
         },
         {
-          "description": "True when no direct child of the scope element has control_type=dialog.",
+          "description": "True when no direct child of the scope anchor's window has role=\"dialog\".",
           "type": "object",
           "properties": {
             "scope": {
@@ -955,7 +946,7 @@
           ]
         },
         {
-          "description": "True when the OS foreground window is a dialog belonging to the same process as scope. Optionally also checks the dialog title.",
+          "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title. `scope` is required by convention but not used in evaluation.",
           "type": "object",
           "properties": {
             "scope": {
@@ -1007,7 +998,25 @@
           ]
         },
         {
-          "description": "Always evaluates to true immediately. Use as `expect` on steps where success is guaranteed by the action (e.g. Capture, NoOp).",
+          "description": "True when the file at `path` exists on disk. `path` supports `{output.*}` substitution.",
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "File path to check. Supports `{output.*}` substitution.",
+              "type": "string"
+            },
+            "type": {
+              "const": "FileExists"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "path"
+          ]
+        },
+        {
+          "description": "Always evaluates to true immediately. Use as `expect` on steps where success is guaranteed by the action (e.g. Eval, WriteOutput, NoOp).",
           "type": "object",
           "properties": {
             "type": {
@@ -1101,11 +1110,11 @@
           ]
         },
         {
-          "description": "True when the JS expression `expr` evaluates to a truthy value in the browser tab anchored to `scope`. Use to wait for tab readiness, e.g. `document.readyState === 'complete'`.",
+          "description": "True when the JS expression `expr` evaluates to the string \"true\" in the browser tab anchored to `scope`. The expression must return a boolean, e.g. `document.readyState === 'complete'`.",
           "type": "object",
           "properties": {
             "expr": {
-              "description": "JS expression to evaluate in the tab. Returns true when the result is truthy.",
+              "description": "JS expression to evaluate in the tab. Must return a boolean — only the string \"true\" is treated as passing.",
               "type": "string"
             },
             "scope": {
@@ -1361,7 +1370,7 @@
     "RetryPolicy": {
       "oneOf": [
         {
-          "description": "No retries. The step fails immediately when the expect condition times out.",
+          "description": "On a step: inherit the workflow-level `defaults.retry` policy. On `defaults.retry` itself: disable retries — steps fail immediately on timeout.",
           "const": "none"
         },
         {
@@ -1412,7 +1421,7 @@
           "$ref": "#/$defs/Condition"
         },
         "fallback": {
-          "description": "Optional fallback action run when `expect` times out on the primary action.\nAfter the fallback runs, `expect` is re-polled once with a fresh timeout.\nIf it succeeds, the step succeeds; otherwise `on_failure` decides what happens.",
+          "description": "Optional fallback action run when `expect` times out on the primary action.\nAfter the fallback runs, `expect` is re-polled in a loop (every 100 ms)\nuntil the step timeout expires. If it succeeds, the step succeeds;\notherwise `on_failure` decides what happens.",
           "anyOf": [
             {
               "$ref": "#/$defs/Action"

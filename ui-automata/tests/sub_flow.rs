@@ -23,8 +23,10 @@ fn run_subflow(
     parent_yaml: &str,
     desktop: MockDesktop,
 ) -> (Result<WorkflowState, AutomataError>, Vec<PhaseEvent>) {
-    let wf = WorkflowFile::load_from_str(parent_yaml, &HashMap::new())
-        .expect("parent YAML parse failed");
+    let wf = match WorkflowFile::load_from_str(parent_yaml, &HashMap::new()) {
+        Ok(wf) => wf,
+        Err(e) => return (Err(AutomataError::Internal(e)), Vec::new()),
+    };
     let mut executor = Executor::new(desktop);
     let mut events = Vec::new();
     let result = wf.run(&mut executor, Some(&mut |e| events.push(e)), None);
@@ -132,14 +134,12 @@ fn subflow_runs_and_completes() {
         "basic_child",
         r#"
 name: child
-anchors:
-  root: { type: Root, selector: "*" }
 phases:
   - name: child_step
     steps:
       - intent: no-op
         action: { type: NoOp }
-        expect: { type: DialogAbsent, scope: root }
+        expect: { type: Always }
 "#,
     );
 
@@ -370,18 +370,15 @@ fn subflow_failure_propagates_to_parent() {
         "fail_child",
         r#"
 name: child
-anchors:
-  nonexistent_scope: { type: Root, selector: "*" }
 phases:
   - name: doomed
     steps:
-      - intent: find element that does not exist
+      - intent: wait for nonexistent file (always times out)
         action: { type: NoOp }
         timeout: 100ms
         expect:
-          type: ElementFound
-          scope: nonexistent_scope
-          selector: "[role=button]"
+          type: FileExists
+          path: /nonexistent/path/that/does/not/exist/ever
 "#,
     );
 
@@ -417,32 +414,27 @@ fn subflow_skipped_after_prior_failure() {
         "skip_child",
         r#"
 name: child
-anchors:
-  root: { type: Root, selector: "*" }
 phases:
   - name: should_not_run
     steps:
       - intent: this must not execute
         action: { type: NoOp }
-        expect: { type: DialogAbsent, scope: root }
+        expect: { type: Always }
 "#,
     );
 
     let parent = format!(
         r#"
 name: parent
-anchors:
-  nonexistent: {{ type: Root, selector: "*" }}
 phases:
   - name: fail_first
     steps:
-      - intent: fail immediately
+      - intent: fail immediately (nonexistent file)
         action: {{ type: NoOp }}
         timeout: 100ms
         expect:
-          type: ElementFound
-          scope: nonexistent
-          selector: "[role=button]"
+          type: FileExists
+          path: /nonexistent/path/that/does/not/exist/ever
   - name: run_child
     subflow: {child}
 "#,

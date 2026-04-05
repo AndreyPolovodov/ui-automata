@@ -254,15 +254,15 @@ pub enum AnchorKind {
     /// Resolved within a parent anchor's subtree. Re-queried automatically when the cached
     /// handle goes stale (e.g. after a page navigation or panel reload).
     Stable,
-    /// Stored at runtime via a `Capture` action. Released when the phase that created it exits.
+    /// Short-lived anchor declared in a phase's `mount` list. Released when the phase exits.
     Ephemeral,
     /// A CDP browser session (Edge). Calls `browser.ensure()` on mount; stores the
     /// Edge window as a Root UIA anchor so UIA actions can target it normally.
     Browser,
     /// A specific browser tab. `parent` must name a `Browser` anchor.
-    /// `blank: true` — open a new blank tab (or reuse an existing New Tab page);
+    /// Omit `selector` (or use `"*"`) — open a new blank tab (or reuse an existing New Tab page);
     /// navigate via a `BrowserNavigate` action. Closed on unmount.
-    /// Omit `blank` — attach to an existing tab matched by `selector`. Left open on unmount.
+    /// Set `selector` — attach to an existing tab matched by title/url. Left open on unmount.
     Tab,
 }
 
@@ -717,6 +717,7 @@ anchors:
   root: { type: Root, selector: "*" }
 phases:
   - name: do_nothing
+    mount: [root]
     steps:
       - intent: noop
         action: { type: NoOp }
@@ -742,6 +743,7 @@ anchors:
   ed: { type: Root, selector: "*" }
 phases:
   - name: type_it
+    mount: [ed]
     steps:
       - intent: type
         action: { type: TypeText, scope: ed, selector: "[role=edit]", text: "{param.text}" }
@@ -875,6 +877,7 @@ anchors:
   root: { type: Root, selector: "*" }
 phases:
   - name: p
+    mount: [root]
     steps:
       - intent: x
         action: { type: NoOp }

@@ -96,7 +96,6 @@ CSS-like paths over Windows UI Automation properties:
 String operators: `=` exact, `~=` contains, `^=` starts with, `$=` ends with.
 Combinators: `>` immediate child, `>>` any descendant.
 Modifiers: `:nth(n)`, `:parent`, `:ancestor(n)`.
-`Button[name=Open]` is shorthand for `[role=button][name=Open]`.
 
 Works across Win32, WPF, WinForms, WinUI, and UWP.
 

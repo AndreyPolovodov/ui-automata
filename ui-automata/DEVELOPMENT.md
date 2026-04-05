@@ -36,6 +36,12 @@ Key concepts:
 ## Running tests
 
 ```sh
-# Unit + schema tests (no Windows required)
+# Unit + mock tests (Windows not required)
 cargo test -p ui-automata
+```
+
+## Linting all workflows
+
+```sh
+cargo run --bin ui-workflow-check -- $(find workflows -name '*.yml' | tr '\n' ' ')
 ```

@@ -96,9 +96,10 @@ pub enum Action {
     ///
     /// Unlike `Click`, `Invoke` does not require a valid bounding rect, so it
     /// works on elements that are scrolled out of view (bounds `(0,0,1,1)`).
-    /// Falls back to `Click` when the element does not support `InvokePattern`.
-    /// Prefer this over `Click` + `ScrollIntoView` for items in WinUI/UWP
-    /// scrollable lists where mouse-wheel scrolling causes elastic snap-back.
+    /// Also tries `SelectionItemPattern` when `InvokePattern` is unavailable.
+    /// Returns an error if neither pattern is supported — does not fall back to
+    /// `Click`. Prefer this over `Click` + `ScrollIntoView` for items in
+    /// WinUI/UWP scrollable lists where mouse-wheel scrolling causes snap-back.
     Invoke {
         scope: String,
         selector: SelectorPath,
@@ -194,8 +195,10 @@ pub enum Action {
     },
 
     /// Spawn an external process and wait for it to exit.
-    /// Fails if the exit code is non-zero.
-    /// `{output.*}` tokens in `command` and `args` are substituted before execution.
+    /// Stores the exit code as a string in locals under `__exec_exit_code__`.
+    /// Fails if the exit code is non-zero — use `on_failure: continue` to suppress.
+    /// Use `ExecSucceeded` as the `expect` condition to detect success without failing the step.
+    /// `{output.*}` and `{param.*}` tokens in `command` and `args` are substituted before execution.
     Exec {
         /// Executable path or command name (resolved via PATH).
         command: String,
@@ -214,8 +217,8 @@ pub enum Action {
     MoveFile { source: String, destination: String },
 
     /// Navigate the browser tab anchored to `scope` to `url`.
-    /// Polls `document.readyState` until `"complete"` before reporting success.
-    /// `scope` must name a `Tab` anchor.
+    /// Polls `document.readyState` until `"complete"` with a hardcoded 30s deadline
+    /// (independent of the step's `timeout:`). `scope` must name a `Tab` anchor.
     BrowserNavigate { scope: String, url: String },
 
     /// Evaluate a JavaScript expression in the browser tab anchored to `scope`.

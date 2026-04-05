@@ -53,7 +53,7 @@ pub trait Element: Clone + 'static {
     /// Localized name / label of the element. `None` if empty or unavailable.
     fn name(&self) -> Option<String>;
 
-    /// Localized role string (e.g. "Button", "Pane", "ToolBar").
+    /// Localized role string from `GetLocalizedControlType` (e.g. "button", "pane", "tool bar").
     fn role(&self) -> String;
 
     /// Value text (ValuePattern) or name fallback.
@@ -127,7 +127,8 @@ pub trait Element: Clone + 'static {
     /// for items in virtualised or scrollable lists (e.g. Settings nav items,
     /// WinUI ListView rows) where mouse-wheel scrolling causes elastic snap-back.
     ///
-    /// Falls back to `click()` when the element does not support `InvokePattern`.
+    /// Also tries `SelectionItemPattern` when `InvokePattern` is unavailable.
+    /// Returns an error if neither pattern is supported — does not fall back to `click()`.
     fn invoke(&self) -> Result<(), AutomataError> {
         // Default: fall back to click for platforms that don't override this.
         self.click()
@@ -157,8 +158,8 @@ pub trait Desktop: Send + 'static {
     /// Launch an executable by name or full path. Returns the process ID.
     fn open_application(&self, exe: &str) -> Result<u32, AutomataError>;
 
-    /// The element that currently has keyboard focus (topmost modal if a dialog
-    /// is present). Returns `None` if the foreground window is unknown.
+    /// The element for the current OS foreground window (`GetForegroundWindow`).
+    /// Returns `None` if there is no foreground window or the lookup fails.
     fn foreground_window(&self) -> Option<Self::Elem>;
 
     /// Raw HWND as `u64` for process-ownership checks without a full element

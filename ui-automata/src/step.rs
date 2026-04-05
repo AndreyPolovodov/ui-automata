@@ -18,8 +18,9 @@ pub struct Step {
     /// The UI action to perform: click, type text, press a key, close a window, etc.
     pub action: Action,
     /// Optional fallback action run when `expect` times out on the primary action.
-    /// After the fallback runs, `expect` is re-polled once with a fresh timeout.
-    /// If it succeeds, the step succeeds; otherwise `on_failure` decides what happens.
+    /// After the fallback runs, `expect` is re-polled in a loop (every 100 ms)
+    /// until the step timeout expires. If it succeeds, the step succeeds;
+    /// otherwise `on_failure` decides what happens.
     #[serde(default)]
     pub fallback: Option<Action>,
     /// Condition that must become true after the action for the step to succeed.

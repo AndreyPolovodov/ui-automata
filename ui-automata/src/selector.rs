@@ -20,24 +20,21 @@
 /// ```text
 /// # Root match: the scope element itself is tested against this step.
 /// # Typically used when the scope is a desktop window list.
-/// Window[title~=Mastercam]
+/// [role=window][title~=Mastercam]
 ///
 /// # Immediate child: find the ToolBar that is a direct child of the scope
 /// # root. Does NOT match grandchildren.
-/// Window[title~=Mastercam] > ToolBar[name=Mastercam]
+/// [role=window][title~=Mastercam] > [role=tool bar][name=Mastercam]
 ///
 /// # Any descendant: find the "Open" button anywhere inside the window.
-/// Window[title~=Mastercam] >> Button[name=Open]
+/// [role=window][title~=Mastercam] >> [role=button][name=Open]
 ///
 /// # Leading >>: search within the scope root without re-matching it.
 /// # Useful when the scope anchor IS the container (e.g. scope = dialog).
 /// >> [role=combo box][name='File name:'] >> [role=edit]
 ///
 /// # :nth — select by position (0-indexed) among matched siblings.
-/// ToolBar[name=Mastercam] > Group:nth(1)
-///
-/// # Bare role shorthand: equivalent to [role=Button].
-/// Button[name=Open]
+/// [role=tool bar][name=Mastercam] > [role=group]:nth(1)
 ///
 /// # Predicate-only (no bare role): matches any element named "File name:"
 /// # regardless of role — useful when role strings differ across OS versions.
