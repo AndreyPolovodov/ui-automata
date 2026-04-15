@@ -7,9 +7,9 @@ use super::{
 use uiautomation::UIAutomation;
 use uiautomation::inputs::{Keyboard, Mouse};
 use uiautomation::patterns::{
-    UIInvokePattern, UISelectionItemPattern, UIValuePattern, UIWindowPattern,
+    UIInvokePattern, UISelectionItemPattern, UITogglePattern, UIValuePattern, UIWindowPattern,
 };
-use uiautomation::types::{Point, TreeScope, WindowVisualState};
+use uiautomation::types::{Point, ToggleState, TreeScope, WindowVisualState};
 
 fn map_err(e: impl std::fmt::Display) -> UiError {
     UiError::Platform(e.to_string())
@@ -449,6 +449,28 @@ impl ui_automata::Element for UIElement {
             .close()
             .map_err(map_err)
             .map_err(Into::into)
+    }
+
+    fn toggle_state(&self) -> Result<Option<bool>, ui_automata::AutomataError> {
+        match self.inner.get_pattern::<UITogglePattern>() {
+            Ok(tp) => {
+                let state = tp.get_toggle_state()
+                    .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))?;
+                Ok(Some(state == ToggleState::On))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn toggle(&self) -> Result<(), ui_automata::AutomataError> {
+        self.inner
+            .get_pattern::<UITogglePattern>()
+            .map_err(|_| ui_automata::AutomataError::Internal(format!(
+                "Toggle: element '{}' does not support TogglePattern",
+                self.inner.get_name().unwrap_or_default()
+            )))?
+            .toggle()
+            .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))
     }
 
     fn hwnd(&self) -> Option<u64> {

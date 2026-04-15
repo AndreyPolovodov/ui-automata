@@ -719,6 +719,7 @@ const ACTIONS_SCOPE_SELECTOR: &[&str] = &[
     "Focus",
     "Invoke",
     "SetValue",
+    "SetToggle",
     "Extract",
 ];
 const ACTIONS_SCOPE_ONLY: &[&str] = &[
@@ -738,6 +739,7 @@ const ALL_ACTION_TYPES: &[&str] = &[
     "Focus",
     "Invoke",
     "SetValue",
+    "SetToggle",
     "ActivateWindow",
     "MinimizeWindow",
     "CloseWindow",
@@ -810,6 +812,11 @@ fn lint_action(
         "SetValue" => {
             if let Some((s, span)) = require_str(v, "value", path, diags) {
                 check_interpolation(s, &span, &format!("{path}.value"), params, diags);
+            }
+        }
+        "SetToggle" => {
+            if get(v, "state").is_none() {
+                diags.push(diag_at(&v.span, path, "missing required field 'state'"));
             }
         }
         "ClickForegroundButton" | "ClickForeground" => {
@@ -926,6 +933,7 @@ const ALL_CONDITION_TYPES: &[&str] = &[
     "ElementVisible",
     "ElementHasText",
     "ElementHasChildren",
+    "ElementChecked",
     "WindowWithAttribute",
     "ProcessRunning",
     "WindowClosed",
@@ -971,7 +979,7 @@ fn lint_condition(
     }
 
     match type_str {
-        "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" => {
+        "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" | "ElementChecked" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
                 check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }

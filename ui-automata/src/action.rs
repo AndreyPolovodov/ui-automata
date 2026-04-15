@@ -119,6 +119,16 @@ pub enum Action {
         value: String,
     },
 
+    /// Set a checkbox or toggle button to a specific state via `ITogglePattern`.
+    /// Reads the current toggle state first and calls `Toggle()` only if needed.
+    /// Idempotent: safe to call even if the element is already in the desired state.
+    SetToggle {
+        scope: String,
+        selector: SelectorPath,
+        /// `true` = checked/on, `false` = unchecked/off.
+        state: bool,
+    },
+
     // ── Dialog helpers ────────────────────────────────────────────────────────
     /// Find the first dialog child of `scope` and close it.
     DismissDialog { scope: String },
@@ -278,6 +288,9 @@ impl Action {
             } => {
                 format!("SetValue({scope}:{selector} {value:?})")
             }
+            Action::SetToggle { scope, selector, state } => {
+                format!("SetToggle({scope}:{selector} → {})", if *state { "on" } else { "off" })
+            }
             Action::DismissDialog { scope } => format!("DismissDialog({scope})"),
             Action::ClickForegroundButton { name } => format!("ClickForegroundButton({name:?})"),
             Action::ClickForeground { name } => format!("ClickForeground({name:?})"),
@@ -382,6 +395,18 @@ impl Action {
                 selector,
                 value,
             } => find_required(dom, desktop, scope, selector)?.set_value(value),
+
+            Action::SetToggle { scope, selector, state } => {
+                let el = find_required(dom, desktop, scope, selector)?;
+                match el.toggle_state()? {
+                    None => Err(AutomataError::Internal(format!(
+                        "SetToggle: element '{}' does not support TogglePattern",
+                        selector
+                    ))),
+                    Some(current) if current == *state => Ok(()), // already in desired state
+                    _ => el.toggle(),
+                }
+            }
 
             Action::DismissDialog { scope } => {
                 let root = dom.get(scope, desktop)?.clone();

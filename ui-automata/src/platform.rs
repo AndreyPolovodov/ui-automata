@@ -134,6 +134,20 @@ pub trait Element: Clone + 'static {
         self.click()
     }
 
+    /// Query the toggle state of this element (CheckBox, ToggleButton, etc.).
+    /// Returns `Some(true)` if checked/on, `Some(false)` if unchecked/off,
+    /// `None` if the element does not support `TogglePattern`.
+    fn toggle_state(&self) -> Result<Option<bool>, AutomataError> {
+        Ok(None)
+    }
+
+    /// Toggle this element via `ITogglePattern::Toggle()`.
+    /// Returns `Err` if `TogglePattern` is not supported.
+    /// Prefer `SetToggle` action for idempotent state setting.
+    fn toggle(&self) -> Result<(), AutomataError> {
+        self.click()
+    }
+
     /// Scroll ancestor containers until this element is within their visible
     /// viewport. Uses `ScrollItemPattern` when supported; falls back to a
     /// geometric ancestor walk with `ScrollPattern`.

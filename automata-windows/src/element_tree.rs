@@ -1,7 +1,7 @@
 use uiautomation::controls::ControlType;
 use uiautomation::core::UICondition;
-use uiautomation::patterns::UIValuePattern;
-use uiautomation::types::TreeScope;
+use uiautomation::patterns::{UITogglePattern, UIValuePattern};
+use uiautomation::types::{ToggleState, TreeScope};
 use uiautomation::{UIAutomation, UIElement as UiaElement};
 
 use crate::Result;
@@ -17,6 +17,9 @@ pub struct ElementNode {
     pub automation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// Toggle state for checkboxes and toggle buttons: `true` = checked/on, `false` = unchecked/off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub toggle_state: Option<bool>,
     pub x: i32,
     pub y: i32,
     pub width: i32,
@@ -51,6 +54,10 @@ impl ui_automata::Element for ElementNode {
     }
     fn text(&self) -> R<String> {
         Ok(self.text.clone().unwrap_or_default())
+    }
+
+    fn toggle_state(&self) -> R<Option<bool>> {
+        Ok(self.toggle_state)
     }
 
     // ── not meaningful on a snapshot ─────────────────────────────────────────
@@ -127,6 +134,8 @@ pub struct ElementFindResult {
     pub role: String,
     pub value: Option<String>,
     pub enabled: bool,
+    /// Toggle state for checkboxes: `Some(true)` = checked, `Some(false)` = unchecked, `None` = not a toggle element.
+    pub toggle_state: Option<bool>,
     pub bounds: Option<(i32, i32, i32, i32)>,
     pub automation_id: Option<String>,
     pub pid: u32,
@@ -296,6 +305,10 @@ pub fn find_elements(
                 .and_then(|p| p.get_value().ok())
                 .filter(|s| !s.is_empty());
             let enabled = el.inner.is_enabled().unwrap_or(false);
+            let toggle_state = el.inner.get_pattern::<UITogglePattern>()
+                .ok()
+                .and_then(|tp| tp.get_toggle_state().ok())
+                .map(|s| s == ToggleState::On);
             let bounds = el
                 .inner
                 .get_bounding_rectangle()
@@ -345,6 +358,7 @@ pub fn find_elements(
                 role,
                 value,
                 enabled,
+                toggle_state,
                 bounds,
                 automation_id: el_automation_id,
                 pid: win_pid,
@@ -461,6 +475,12 @@ fn walk_element(
         _ => None,
     };
 
+    let toggle_state = element
+        .get_pattern::<UITogglePattern>()
+        .ok()
+        .and_then(|tp| tp.get_toggle_state().ok())
+        .map(|s| s == ToggleState::On);
+
     let children = if depth < MAX_DEPTH {
         element
             .find_all(TreeScope::Children, true_cond)
@@ -479,6 +499,7 @@ fn walk_element(
         name,
         automation_id,
         text,
+        toggle_state,
         x,
         y,
         width,

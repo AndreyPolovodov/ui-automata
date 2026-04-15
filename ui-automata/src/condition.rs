@@ -165,6 +165,17 @@ pub enum Condition {
         selector: SelectorPath,
     },
 
+    /// True when the element at `selector` under `scope` has a toggle state matching `state`.
+    /// `state: true` = checked/on, `state: false` = unchecked/off.
+    /// If `state` is omitted, passes for any toggle state (verifies TogglePattern is supported).
+    ElementChecked {
+        scope: String,
+        selector: SelectorPath,
+        /// `Some(true)` = on, `Some(false)` = off, `None` = any.
+        #[serde(default)]
+        state: Option<bool>,
+    },
+
     /// Any application window matches the given attribute filters.
     /// YAML: `type: WindowWithAttribute` + at least one of:
     ///   - `title`: `TitleMatch` against the window's name
@@ -311,6 +322,14 @@ impl TryFrom<serde_yaml::Value> for Condition {
                 scope: req_str("scope")?,
                 selector: req_selector("selector")?,
             }),
+            "ElementChecked" => {
+                let state = map.get("state").and_then(|v| v.as_bool());
+                Ok(Condition::ElementChecked {
+                    scope: req_str("scope")?,
+                    selector: req_selector("selector")?,
+                    state,
+                })
+            }
             "WindowWithAttribute" => {
                 let title: Option<TitleMatch> = map
                     .get("title")
@@ -488,6 +507,7 @@ impl Condition {
             | Condition::ElementVisible { scope, .. }
             | Condition::ElementHasText { scope, .. }
             | Condition::ElementHasChildren { scope, .. }
+            | Condition::ElementChecked { scope, .. }
             | Condition::DialogPresent { scope }
             | Condition::DialogAbsent { scope } => Some(scope),
             _ => None,
@@ -513,6 +533,11 @@ impl Condition {
             Condition::ElementHasChildren { scope, selector } => {
                 format!("ElementHasChildren({scope}:{selector})")
             }
+            Condition::ElementChecked { scope, selector, state } => match state {
+                Some(true)  => format!("ElementChecked({scope}:{selector} on)"),
+                Some(false) => format!("ElementChecked({scope}:{selector} off)"),
+                None        => format!("ElementChecked({scope}:{selector})"),
+            },
             Condition::WindowWithAttribute {
                 title,
                 automation_id,
@@ -605,6 +630,17 @@ impl Condition {
                     .and_then(|el| el.children().ok())
                     .map(|ch| !ch.is_empty())
                     .unwrap_or(false))
+            }
+            Condition::ElementChecked { scope, selector, state } => {
+                let ts = find_in_scope(dom, desktop, scope, selector)?
+                    .map(|el| el.toggle_state())
+                    .transpose()?
+                    .flatten();
+                Ok(match (ts, state) {
+                    (None, _) => false,           // no TogglePattern → not a toggle element
+                    (Some(_), None) => true,      // has TogglePattern, any state
+                    (Some(actual), Some(expected)) => actual == *expected,
+                })
             }
             Condition::WindowWithAttribute {
                 title,

@@ -374,6 +374,33 @@
           ]
         },
         {
+          "description": "Set a checkbox or toggle button to a specific state via ITogglePattern. Idempotent — only calls Toggle() if the current state differs from `state`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "state": {
+              "description": "`true` = checked/on, `false` = unchecked/off.",
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "SetToggle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "state"
+          ]
+        },
+        {
           "description": "Find the first dialog child of `scope` and close it.",
           "type": "object",
           "properties": {
@@ -781,6 +808,33 @@
             },
             "type": {
               "const": "ElementHasChildren"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "True when the element at `selector` under `scope` has a toggle state matching `state`. `state: true` = checked/on, `state: false` = unchecked/off. If `state` is omitted, passes for any toggle state.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "state": {
+              "description": "`true` = checked/on, `false` = unchecked/off. Omit to accept any toggle state.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "ElementChecked"
             }
           },
           "additionalProperties": false,
