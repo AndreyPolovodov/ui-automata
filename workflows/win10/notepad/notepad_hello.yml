@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
+name: notepad_hello
+description: Open Notepad, type a message, and save the file.
+
+defaults:
+  timeout: 5s
+
+launch:
+  exe: notepad.exe
+  wait: new_pid
+
+anchors:
+  notepad:
+    type: Root
+    selector: "[name~=Notepad]"
+
+  editor:
+    type: Stable
+    parent: notepad
+    selector: ">> [role=edit][name='Text Editor']"
+
+  saveas_dialog:
+    type: Ephemeral
+    parent: notepad
+    selector: ">> [role=dialog][name='Save As']"
+
+phases:
+
+  - name: type_text
+    mount: [notepad, editor]
+    steps:
+      - intent: type text into editor
+        action:
+          type: TypeText
+          scope: editor
+          selector: "*"
+          text: "Hello Automata"
+        expect:
+          type: ElementHasText
+          scope: editor
+          selector: "*"
+          pattern:
+            contains: "Hello Automata"
+
+  - name: save_file
+    mount: [saveas_dialog]
+    unmount: [saveas_dialog]
+    steps:
+      - intent: activate keyboard shortcut for Save As
+        action:
+          type: PressKey
+          scope: notepad
+          selector: "*"
+          key: "ctrl+shift+s"
+        expect:
+          type: DialogPresent
+          scope: notepad
+
+      - intent: type filename in Save As dialog
+        action:
+          type: SetValue
+          scope: saveas_dialog
+          selector: ">> [role=combo box][name='File name:'] > [role=edit]"
+          value: "hello-world"
+        expect:
+          type: ElementHasText
+          scope: saveas_dialog
+          selector: ">> [role=combo box][name='File name:'] > [role=edit]"
+          pattern:
+            contains: "hello-world"
+
+      - intent: click Save button
+        action:
+          type: Invoke
+          scope: saveas_dialog
+          selector: ">> [role=button][name=Save]"
+        expect:
+          type: DialogAbsent
+          scope: notepad

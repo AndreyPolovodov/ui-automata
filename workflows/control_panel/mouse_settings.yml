@@ -49,5 +49,4 @@ phases:
           selector: ">> [role=link][name={param.link}]"
         expect:
           type: ForegroundIsDialog
-          scope: panel
         timeout: 10s

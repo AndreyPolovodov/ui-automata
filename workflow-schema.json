@@ -946,13 +946,9 @@
           ]
         },
         {
-          "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title. `scope` is required by convention but not used in evaluation.",
+          "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title.",
           "type": "object",
           "properties": {
-            "scope": {
-              "description": "Anchor name to resolve the element tree from.",
-              "type": "string"
-            },
             "title": {
               "$ref": "#/$defs/TitleMatch"
             },
@@ -962,8 +958,7 @@
           },
           "additionalProperties": false,
           "required": [
-            "type",
-            "scope"
+            "type"
           ]
         },
         {

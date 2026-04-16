@@ -204,7 +204,6 @@ pub enum Condition {
     },
 
     ForegroundIsDialog {
-        scope: String,
         title: Option<TitleMatch>,
     },
 
@@ -362,10 +361,7 @@ impl TryFrom<serde_yaml::Value> for Condition {
                 } else {
                     None
                 };
-                Ok(Condition::ForegroundIsDialog {
-                    scope: req_str("scope")?,
-                    title,
-                })
+                Ok(Condition::ForegroundIsDialog { title })
             }
             "FileExists" => Ok(Condition::FileExists {
                 path: req_str("path")?,
@@ -493,8 +489,7 @@ impl Condition {
             | Condition::ElementHasText { scope, .. }
             | Condition::ElementHasChildren { scope, .. }
             | Condition::DialogPresent { scope }
-            | Condition::DialogAbsent { scope }
-            | Condition::ForegroundIsDialog { scope, .. } => Some(scope),
+            | Condition::DialogAbsent { scope } => Some(scope),
             _ => None,
         }
     }
@@ -546,9 +541,7 @@ impl Condition {
             }
             Condition::DialogPresent { scope } => format!("DialogPresent({scope})"),
             Condition::DialogAbsent { scope } => format!("DialogAbsent({scope})"),
-            Condition::ForegroundIsDialog { scope, .. } => {
-                format!("ForegroundIsDialog({scope})")
-            }
+            Condition::ForegroundIsDialog { .. } => "ForegroundIsDialog".to_string(),
             Condition::Always => "Always".to_string(),
             Condition::ExecSucceeded => "ExecSucceeded".to_string(),
             Condition::AllOf { conditions } => format!(
@@ -690,7 +683,7 @@ impl Condition {
             }
             Condition::DialogPresent { scope } => has_dialog_child(dom, desktop, scope),
             Condition::DialogAbsent { scope } => Ok(!has_dialog_child(dom, desktop, scope)?),
-            Condition::ForegroundIsDialog { scope: _, title } => {
+            Condition::ForegroundIsDialog { title } => {
                 let fg = match desktop.foreground_window() {
                     Some(w) => w,
                     None => return Ok(false),

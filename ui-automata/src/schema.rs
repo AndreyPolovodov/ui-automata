@@ -189,11 +189,10 @@ impl JsonSchema for Condition {
         // ForegroundIsDialog — scope is parsed but ignored at runtime; only fg window role/title matter
         variants.push(json!({
             "type": "object",
-            "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title. `scope` is required by convention but not used in evaluation.",
-            "required": ["type", "scope"],
+            "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title.",
+            "required": ["type"],
             "properties": {
                 "type": { "const": "ForegroundIsDialog" },
-                "scope": scope_s(),
                 "title": title_match
             },
             "additionalProperties": false

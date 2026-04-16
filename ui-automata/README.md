@@ -1,12 +1,28 @@
-# UI Automata
+<div align="center">
 
-Declarative workflow engine for Windows UI automation, built for reliable unattended execution and AI agent use.
+  <img src="https://github.com/visioncortex/vtracer/raw/master/docs/images/visioncortex-banner.png">
+  <h1>UI Automata</h1>
 
-<video src="https://github.com/user-attachments/assets/81f0cbb4-e3bf-416f-a373-74ee2cb3bedb" controls width="100%"></video>
+  <p>
+    <strong>The AI Toolkit for Windows Desktop Automation</strong>
+  </p>
+
+  <h3>
+    <a href="https://automata.visioncortex.org">Website</a>
+    <span> | </span>
+    <a href="https://github.com/visioncortex/ui-automata/releases/latest">Download</a>
+    <span> | </span>
+    <a href="https://automata.visioncortex.org/docs/introduction/what-is-ui-automata/">Docs</a>
+  </h3>
+</div>
+
+UI Automata lets an AI agent write, run, and debug automation workflows across any Windows application (Win32, WPF, WinForms, WinUI, UWP) and Edge-based browsers, in the same workflow file.
+
+We at Vision Cortex built it to help clients in industrial design automate CAD/CAM tasks: multi-step workflows in desktop applications that have no API, require precise timing, and need to handle popups and error dialogs without failing silently. We're open-sourcing it so other teams can do the same.
 
 ## The problem
 
-Windows work that is too interactive for a script and too tedious to do by hand — checking a service status in Event Viewer, extracting a value from a legacy desktop app, configuring a settings dialog with no API — is exactly what AI agents should handle. But every step in a Windows UI workflow can fail in ways a script cannot see:
+Windows UI work is exactly what AI agents should handle. But every step can fail in ways a script cannot see:
 
 - **Timing**: a button click completes before the app finishes processing. The UI looks ready; it is not.
 - **Transient disabled state**: the element exists and is visible, but temporarily disabled. The click fires, nothing happens, no error is returned.
@@ -14,34 +30,64 @@ Windows work that is too interactive for a script and too tedious to do by hand 
 - **Stale handles**: the app rebuilds its UI after a navigation. Cached references point to the wrong place; clicks land silently on the wrong target.
 - **Focus loss**: a keypress meant for one field lands on another.
 
-These are not edge cases — they are routine in any real Windows application.
+These are not edge cases: they are routine in any real Windows application.
 
-## Why existing tools fall short
+## Quick Demo
 
-| | UI Automata | AutoHotkey | UIPath | Selenium | Vision agents |
-|---|---|---|---|---|---|
-| Native Windows apps | ✓ | ✓ | ✓ | ✗ | ✓ |
-| Structured recovery | ✓ | ✗ | partial | ✗ | ✗ |
-| Agent-native | ✓ | ✗ | ✗ | ✗ | ✓ |
-| Audit trail | ✓ | ✗ | ✓ | partial | ✗ |
-| Execution speed | fast | fast | fast | fast | slow |
-| Cost per run | low | low | high | low | high |
-| Resolution-stable | ✓ | ✗ | partial | — | ✗ |
+<video src="https://github.com/user-attachments/assets/81f0cbb4-e3bf-416f-a373-74ee2cb3bedb" controls width="100%"></video>
 
-AutoHotkey clicks pixel coordinates and `Sleep`s — no observable outcomes, no recovery. UIPath requires every edge case scripted in advance by a specialist. Selenium covers browsers only. pywinauto wraps UIA in Python but is fully imperative. Vision-based agents are slow, expensive per run, and fragile to layout changes.
+> Install Python on this machine from the Microsoft Store, not python.org. Pick the latest 3.x version.
 
-## The approach
+The agent opens the Store via its app URI, searches for Python, reads the result cards to identify 3.13, clicks Get, and polls until installation completes.
 
-**Every action is an intent, not a command.**
+> Grab the latest installer from the official site, run it silently, then open Git Bash and confirm it works.
 
-Each step declares an **action**, an **expect** condition, and an optional **recovery** handler. The engine runs the same lifecycle for every step:
+For Git, the agent navigates to gitforwindows.org in Edge, triggers the download using UIA (CDP synthetic clicks are blocked for file downloads), waits for the installer to finish via the Downloads panel, runs it silently with UAC confirmation, then falls back to vision OCR to read the Git Bash terminal output where UIA has no coverage.
 
-1. Execute the action
-2. Poll the `expect` condition every 100ms
-3. Condition passes → advance; timeout → check recovery handlers, then retry, skip, or fail
+## Installation
+
+```powershell
+PowerShell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/visioncortex/ui-automata/refs/heads/main/install/install-windows.ps1 | iex"
+```
+
+## Use cases
+
+UI Automata is designed to be driven by an AI agent through its MCP server. Here are some example prompts:
+
+### Automate a desktop application
+
+<video src="https://github.com/user-attachments/assets/59429bd6-fa34-4530-998f-b6628eacac54" controls width="100%"></video>
+
+> Use the ui-automata skill. Open Mastercam, load the file at C:\Projects\part.mcam, open the simulator window, and export the result csv to C:\output\.
+
+The agent walks the element tree, tests selectors live, writes the workflow YAML, and runs it (all in one session). You provide the intent and review the result.
+
+<!--
+### Build a workflow from your actions
+
+> I need to automate our weekly report export from our ERP. It has no API. Watch me navigate through the dialogs and turn my actions into a reusable workflow that takes `start_date` and `end_date` as parameters.
+
+The agent observes the live element tree as you navigate, then generates a parameterised workflow you can schedule and run unattended.
+-->
+
+### Fix a broken workflow
+
+> Our workflow that enters invoices into AccountMate is failing with a stale handle error after the confirmation dialog closes. Here's the error trace. Fix it.
+
+The agent replays the workflow, pauses at the failure, inspects the live element tree, and adjusts the anchor or selector to handle the UI rebuild.
+
+### Automate across desktop and browser
+
+> Download this month's supplier invoices from our vendor portal in Edge, then open our accounting desktop app and enter each one. The portal URL is...
+
+Workflows can mix browser steps (CDP-powered, structured DOM access) with desktop app steps in a single file. No need to stitch together separate tools.
+
+## How it works
+
+Every step declares an **action**, an **expect** condition, and an optional **recovery** handler:
 
 ```yaml
-- intent: click Open button
+- intent: click the Open button
   action:
     type: Click
     scope: main_window
@@ -52,272 +98,79 @@ Each step declares an **action**, an **expect** condition, and an optional **rec
   timeout: 10s
 ```
 
-No sleeps. No guessing. No silent failures. Recovery handlers are declared once and fire wherever their trigger condition is met; known failure modes are handled in one place, not scattered through step logic.
+The engine runs the same lifecycle for every step:
 
-- Elements are identified by role and name, not pixel coordinates — selectors survive resolution changes and most app updates.
-- Wrong-window interactions are caught at the execution layer before any action fires.
-- Every action, condition check, and recovery handler is logged; failures include the full execution trace and a UI tree dump.
+1. Execute the action
+2. Poll `expect` every 100ms
+3. Condition passes → advance. Timeout → run recovery handler, then retry, skip, or fail.
 
-## The shadow DOM
+No sleeps. No hardcoded waits. Recovery handlers are declared once and fire wherever their trigger condition is met: a dialog appearing mid-workflow, a confirmation prompt, a progress bar that needs to clear.
 
-Windows UI Automation is a cross-process RPC protocol — every element query is a round-trip to the target process. Walking a nested element path issues one call per level; a 20-step workflow that re-queries handles on every step pays that cost repeatedly.
+<video src="https://github.com/user-attachments/assets/a68c115f-34fc-461e-b682-bc21840c6685" controls width="100%"></video>
 
-ui-automata maintains a **shadow DOM**: a cached mirror of the live element tree. Handles are resolved once and reused. When a handle goes stale (the app rebuilt its UI), the engine walks up to the nearest live ancestor, re-queries downward, and continues without failing the step. This is the inverse of React's virtual DOM — instead of pushing changes into a UI, we efficiently read from one we do not control.
-
-**HWND locking**: when a Root anchor is first resolved, the engine records the exact OS window handle. All subsequent lookups go directly to that HWND. Focus theft, title changes, new windows with similar names — none cause the anchor to drift. If the original window is destroyed, the workflow fails explicitly rather than silently attaching to something else.
-
-| Tier | Lifetime | On stale |
-|------|----------|----------|
-| **Root** | Process lifetime | Fatal — window is gone |
-| **Session** | One open/close cycle | Re-resolved on next use |
-| **Stable** | While parent window is open | Re-queried from nearest live ancestor |
-| **Ephemeral** | Single phase | Released on phase exit |
+See the [notepad demo workflow](https://github.com/visioncortex/ui-automata/blob/main/workflows/win11/notepad/notepad_demo.yml) for a complete example with phases, anchors, recovery handlers, and flow control.
 
 ## Selectors
 
 CSS-like paths over Windows UI Automation properties:
 
-| Attribute | UIA property |
-|---|---|
-| `role` | Control type / accessibility role |
-| `name` | Accessible name |
-| `id` | UIA AutomationId (survives localization) |
-
-```python
->> [role=edit][name='File name:']            # descendant edit field
->  [role=button][name^=Don][name$=Save]      # direct child: "Don't Save"
-> [role=list item]:nth(0)                    # first list item
->> [role=list item][name~=Wing]:parent       # parent of matching item
->> [role=tab item]:nth(2) > [role=button]    # button inside third tab
->> [id=SettingsPageAbout_New]                # by AutomationId
->> [role=button|menu item]                   # OR: matches either role
+```
+>> [role=edit][name='File name:']           # descendant edit field
+>  [role=button][name^=Don][name$=Save]     # direct child: "Don't Save"
+>> [role=list item]:nth(0)                  # first list item
+>> [role=list item][name~=Wing]:parent      # parent of matching item
+>> [id=SettingsPageAbout_New]               # by AutomationId (locale-stable)
+>> [role=button|menu item]                  # OR: matches either role
 ```
 
-String operators: `=` exact, `~=` contains, `^=` starts with, `$=` ends with.
-Combinators: `>` immediate child, `>>` any descendant.
-Modifiers: `:nth(n)`, `:parent`, `:ancestor(n)`.
+Works across Win32, WPF, WinForms, WinUI, and UWP. → [Full reference](https://automata.visioncortex.org/docs/core-concepts/selectors/)
 
-Works across Win32, WPF, WinForms, WinUI, and UWP.
+## The shadow DOM
 
-## Capabilities
+Windows UI Automation is a cross-process RPC protocol: every element query is a round-trip to the target process. Walk a path of nested elements and each level is a separate cross-process call. Traditional automation tools pay this cost on every step; a 20-step workflow makes 20+ round-trips, re-discovering structure it already found the step before.
 
-**Conditions** — usable as `expect`, `precondition`, recovery trigger, or flow-control predicate:
+UI Automata's answer is the **shadow DOM**: a cached mirror of the live element tree. Handles are resolved once and reused for every subsequent step (a cached lookup is effectively free compared to a live UIA query). Think of it as the inverse of React's virtual DOM: React maintains a virtual tree to efficiently write to a UI it controls; the shadow DOM maintains one to efficiently read from a UI it does not.
 
-- *Element*: `ElementFound`, `ElementEnabled`, `ElementVisible`, `ElementHasText` (exact / contains / starts_with / regex / non_empty), `ElementHasChildren`
-- *Window*: `WindowWithAttribute` (title, PID, automation ID), `WindowWithState` (active / visible), `WindowClosed`, `DialogPresent`, `DialogAbsent`, `ForegroundIsDialog`
-- *Browser*: `TabWithAttribute` (title / URL match on a CDP tab anchor), `TabWithState` (JS expression evaluated in a tab — truthy = true; use to wait for page readiness)
-- *System*: `ProcessRunning`, `FileExists`, `ExecSucceeded` (exit code 0), `EvalCondition` (boolean expression against outputs/locals), `Always`
-- *Logic*: `AllOf`, `AnyOf`, `Not`
+→ [How the shadow DOM works](https://automata.visioncortex.org/docs/core-concepts/shadow-dom/)
 
-**Actions**:
+## Agent tools
 
-- *Interaction*: `Click`, `DoubleClick`, `Hover`, `ClickAt` (fractional coordinates), `Invoke` (IInvokePattern — works on off-screen / virtualised elements), `TypeText`, `SetValue` (ValuePattern, no keystroke simulation), `PressKey`, `Focus`, `ScrollIntoView`, `ActivateWindow`, `MinimizeWindow`, `CloseWindow`, `DismissDialog`
-- *Data*: `Extract` (UIA attribute → output variable), `Eval` (expression → output variable), `WriteOutput` (output variable → file)
-- *System*: `Exec` (external process, capture stdout), `MoveFile`, `Sleep`
-- *Browser*: `BrowserNavigate` (navigate a tab anchor to a URL), `BrowserEval` (evaluate JS in a tab, store result)
-- *Control*: `NoOp` (wait for a condition without acting)
+The included MCP server (`automata-agent`) gives an AI agent direct access to the Windows desktop:
 
-**Control flow**: phases can jump to any named phase — loops, branches, early exits. `finally` phases run unconditionally.
+- **desktop** — list windows, walk the UIA element tree, test selectors live
+- **vision** — OCR and visual layout capture for apps with incomplete UIA support
+- **app** — launch apps, list installed apps, manage windows via the taskbar
+- **window** — minimize, maximize, restore, reposition, or screenshot a window by HWND
+- **run_actions** — run ad-hoc UI automation steps without a workflow file
+- **start_workflow** — run a named workflow and stream per-phase progress
+- **workflow** — list workflows, check status, cancel runs, browse run history, lint YAML
+- **input** — raw mouse and keyboard input, works on any window regardless of UIA support
+- **clipboard** — read or write the Windows clipboard
+- **browser** — control Edge via CDP: navigate, evaluate JavaScript, read the DOM
+- **file** — read, write, copy, move, delete, glob, stat
+- **system** — shell execution, process management, system diagnostics
+- **resources** — browse the embedded workflow library
 
-**Composition**: workflows declare input `params` and named `outputs` and call other workflows as subroutines.
+## Compared to vision-based agents
 
-**Tooling**: JSON Schema for autocomplete and inline validation; built-in linter catches unknown types, invalid selectors, missing fields, and undeclared references before the workflow runs.
+Vision agents work by taking a screenshot and asking an inference model what to click next. UI Automata uses Windows UI Automation directly, with vision as a fallback (not the primary path):
 
-## Install (Windows)
+| | UI Automata | Vision agent |
+|---|---|---|
+| **Approach** | UIA elements + DOM query + vision | Screenshot only |
+| **Reliability** | Deterministic — same selector works across runs | May vary across runs |
+| **Speed** | Sub-second per step | Round-trip to inference API per step |
+| **Cost** | Low — runs locally, no per-step inference | High — every step consumes tokens |
+| **Vision** | On-device, used as fallback | Cloud inference, primary approach |
+| **Platform** | Windows (all frameworks) | macOS-first, limited Windows |
+| **Model dependency** | Any agent, any model | Locked to specific providers |
+| **Browser automation** | CDP (structured page access) | Screenshot of browser |
+| **Trace** | Structured log with full action detail | Sequence of screenshots |
 
-```ps
-PowerShell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/visioncortex/ui-automata/refs/heads/main/install/install-windows.ps1 | iex"
-```
+The two approaches are complementary: use UI Automata for deterministic, repeatable workflows; use vision when you need to handle unfamiliar apps or pages on the fly.
 
-### Example (Windows 11)
+## Community
 
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
-name: notepad_hello
-description: Open Notepad, type a message, and save the file.
+Have a question or want to share what you've built? Join the conversation on [GitHub Discussions](https://github.com/visioncortex/ui-automata/discussions).
 
-defaults:
-  timeout: 5s
-
-launch:
-  exe: notepad.exe
-  wait: new_window
-
-anchors:
-  notepad:
-    type: Root
-    process: Notepad
-    selector: "[name~=Notepad]"
-
-  editor:
-    type: Stable
-    parent: notepad
-    selector: ">> [role=document][name='Text editor']"
-
-  saveas_dialog:
-    type: Ephemeral
-    parent: notepad
-    selector: "> [role=dialog][name^=Save]"
-
-phases:
-
-  - name: type_text
-    mount: [notepad, editor]  # mounted before steps run
-    steps:
-      - intent: type text into editor
-        action:
-          type: TypeText
-          scope: editor
-          selector: "*"
-          text: "Hello Automata"
-        expect:
-          type: ElementHasText
-          scope: editor
-          selector: "*"
-          pattern:
-            contains: "Hello Automata"
-
-  - name: save_file
-    mount: [saveas_dialog]
-    unmount: [saveas_dialog]
-    steps:
-      - intent: activate keyboard shortcut for Save As
-        action:
-          type: PressKey
-          scope: notepad
-          selector: "*"
-          key: "ctrl+shift+s"
-        expect:
-          type: DialogPresent
-          scope: notepad
-
-      - intent: type filename in Save As dialog
-        action:
-          type: SetValue
-          scope: saveas_dialog
-          selector: ">> [role=edit][name='File name:']"
-          value: "hello-world"
-        expect:
-          type: ElementHasText
-          scope: saveas_dialog
-          selector: ">> [role=edit][name='File name:']"
-          pattern:
-            contains: "hello-world"
-
-      - intent: click Save button
-        action:
-          type: Invoke
-          scope: saveas_dialog
-          selector: ">> [role=button][name=Save]"
-        expect:
-          type: DialogAbsent
-          scope: notepad
-```
-
-### Example (Windows 10)
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/visioncortex/ui-automata/main/workflow-schema.json
-name: notepad_hello
-description: Open Notepad, type a message, and save the file.
-
-defaults:
-  timeout: 5s
-
-launch:
-  exe: notepad.exe
-  wait: new_pid
-
-anchors:
-  notepad:
-    type: Root
-    selector: "[name~=Notepad]"
-
-  editor:
-    type: Stable
-    parent: notepad
-    selector: ">> [role=edit][name='Text Editor']"
-
-  saveas_dialog:
-    type: Ephemeral
-    parent: notepad
-    selector: ">> [role=dialog][name='Save As']"
-
-phases:
-
-  - name: type_text
-    mount: [notepad, editor]
-    steps:
-      - intent: type text into editor
-        action:
-          type: TypeText
-          scope: editor
-          selector: "*"
-          text: "Hello Automata"
-        expect:
-          type: ElementHasText
-          scope: editor
-          selector: "*"
-          pattern:
-            contains: "Hello Automata"
-
-  - name: save_file
-    mount: [saveas_dialog]
-    unmount: [saveas_dialog]
-    steps:
-      - intent: activate keyboard shortcut for Save As
-        action:
-          type: PressKey
-          scope: notepad
-          selector: "*"
-          key: "ctrl+shift+s"
-        expect:
-          type: DialogPresent
-          scope: notepad
-
-      - intent: type filename in Save As dialog
-        action:
-          type: SetValue
-          scope: saveas_dialog
-          selector: ">> [role=combo box][name='File name:'] > [role=edit]"
-          value: "hello-world"
-        expect:
-          type: ElementHasText
-          scope: saveas_dialog
-          selector: ">> [role=combo box][name='File name:'] > [role=edit]"
-          pattern:
-            contains: "hello-world"
-
-      - intent: click Save button
-        action:
-          type: Invoke
-          scope: saveas_dialog
-          selector: ">> [role=button][name=Save]"
-        expect:
-          type: DialogAbsent
-          scope: notepad
-```
-
-## Built for the AI agent era
-
-The project includes an MCP server (`automata-agent`) that exposes the full automation engine to AI agents. This is a separate component, not part of the open-source library.
-
-### Agent-driven authoring
-
-The MCP server gives an agent access to the live desktop: it queries the element tree, tests selectors, runs individual actions, and observes results — the same discovery loop a human would do with an inspector tool. From that exploration it writes the workflow. A human provides intent and reviews the result.
-
-### What the agent can do
-
-- **desktop**: list windows, walk the UIA element tree, test selectors live
-- **vision**: OCR and visual layout capture for apps that do not fully expose UIA
-- **app**: launch apps, list installed apps, manage windows via the taskbar
-- **window**: minimize, maximize, restore, reposition, or screenshot a window by HWND
-- **run_actions**: run ad-hoc UI automation steps without a workflow file
-- **start_workflow**: run a named workflow and stream per-phase progress until completion
-- **workflow**: list workflows, check status, cancel runs, browse run history, lint YAML
-- **input**: raw mouse and keyboard input — works on any window regardless of UIA support
-- **clipboard**: read or write the Windows clipboard
-- **browser**: control Microsoft Edge via CDP — navigate, evaluate JavaScript, read the DOM
-- **file**: read, write, copy, move, delete, glob, stat
-- **system**: shell execution, process management, system diagnostics
-- **resources**: browse the embedded workflow library
+Found a bug? Want a feature? [Open an issue](https://github.com/visioncortex/ui-automata/issues/new).

@@ -50,7 +50,6 @@ phases:
           selector: ">> [role=menu item][name='About Windows']"
         expect:
           type: ForegroundIsDialog
-          scope: explorer
 
   - name: extract_version
     mount: [about_windows]

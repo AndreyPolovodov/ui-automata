@@ -60,7 +60,6 @@ recovery_handlers:
   dismiss_ok:
     trigger:
       type: ForegroundIsDialog
-      scope: mastercam
     actions:
       - type: ClickForegroundButton
         name: OK

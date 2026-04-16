@@ -1030,9 +1030,6 @@ fn lint_condition(
             }
         }
         "ForegroundIsDialog" => {
-            if let Some((scope, span)) = require_str(v, "scope", path, diags) {
-                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
-            }
             check_title_match_field(v, "title", path, diags);
         }
         "FileExists" => {
@@ -1830,17 +1827,13 @@ phases:
     fn foreground_is_dialog_title_validated() {
         let raw = r#"
 name: t
-anchors:
-  app: { type: Root, selector: "[name~=App]" }
 phases:
   - name: main
-    mount: [app]
     steps:
       - intent: wait for dialog
         action: { type: NoOp }
         expect:
           type: ForegroundIsDialog
-          scope: app
           title: "plain string not a TitleMatch"
 "#;
         let msgs = diag_messages(raw);
