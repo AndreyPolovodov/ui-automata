@@ -30,7 +30,7 @@ Windows UI work is exactly what AI agents should handle. But every step can fail
 - **Stale handles**: the app rebuilds its UI after a navigation. Cached references point to the wrong place; clicks land silently on the wrong target.
 - **Focus loss**: a keypress meant for one field lands on another.
 
-These are not edge cases: they are routine in any real Windows application.
+These are not edge cases: they are routine in any real Windows application. Vision agents hit every one of them on every run — each step is a screenshot and an inference call. UI Automata's answer is a **token-efficient** workflow: the agent writes and debugs it once, paying the token cost once, and every subsequent run is deterministic, local, and free of inference overhead.
 
 ## Quick Demo
 
