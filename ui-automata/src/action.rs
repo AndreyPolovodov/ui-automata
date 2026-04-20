@@ -27,6 +27,15 @@ pub enum ExtractAttribute {
     InnerText,
 }
 
+// ── ExpandCollapseState ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ExpandCollapseState {
+    Expand,
+    Collapse,
+}
+
 // ── Action ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -127,6 +136,16 @@ pub enum Action {
         selector: SelectorPath,
         /// `true` = checked/on, `false` = unchecked/off.
         state: bool,
+    },
+
+    /// Expand or collapse an element via `IExpandCollapsePattern`.
+    /// Use `state: expand` to open a combo-box or tree node, `state: collapse` to close it.
+    /// Returns an error if the element does not support `ExpandCollapsePattern`.
+    ExpandCollapse {
+        scope: String,
+        selector: SelectorPath,
+        /// `expand` to open, `collapse` to close.
+        state: ExpandCollapseState,
     },
 
     // ── Dialog helpers ────────────────────────────────────────────────────────
@@ -291,6 +310,9 @@ impl Action {
             Action::SetToggle { scope, selector, state } => {
                 format!("SetToggle({scope}:{selector} → {})", if *state { "on" } else { "off" })
             }
+            Action::ExpandCollapse { scope, selector, state } => {
+                format!("ExpandCollapse({scope}:{selector} → {:?})", state)
+            }
             Action::DismissDialog { scope } => format!("DismissDialog({scope})"),
             Action::ClickForegroundButton { name } => format!("ClickForegroundButton({name:?})"),
             Action::ClickForeground { name } => format!("ClickForeground({name:?})"),
@@ -406,6 +428,11 @@ impl Action {
                     Some(current) if current == *state => Ok(()), // already in desired state
                     _ => el.toggle(),
                 }
+            }
+
+            Action::ExpandCollapse { scope, selector, state } => {
+                find_required(dom, desktop, scope, selector)?
+                    .expand_collapse(*state == ExpandCollapseState::Expand)
             }
 
             Action::DismissDialog { scope } => {

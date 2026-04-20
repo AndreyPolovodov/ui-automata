@@ -153,6 +153,15 @@ pub trait Element: Clone + 'static {
         self.click()
     }
 
+    /// Expand or collapse this element via `IExpandCollapsePattern`.
+    /// Returns `Err` if the element does not support `ExpandCollapsePattern`.
+    fn expand_collapse(&self, expand: bool) -> Result<(), AutomataError> {
+        let _ = expand;
+        Err(AutomataError::Platform(
+            "expand_collapse: not supported on this platform".into(),
+        ))
+    }
+
     /// Scroll ancestor containers until this element is within their visible
     /// viewport. Uses `ScrollItemPattern` when supported; falls back to a
     /// geometric ancestor walk with `ScrollPattern`.

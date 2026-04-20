@@ -401,6 +401,33 @@
           ]
         },
         {
+          "description": "Expand or collapse an element via `IExpandCollapsePattern`.\nUse `state: expand` to open a combo-box or tree node, `state: collapse` to close it.\nReturns an error if the element does not support `ExpandCollapsePattern`.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id | help\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "state": {
+              "description": "`expand` to open, `collapse` to close.",
+              "$ref": "#/$defs/ExpandCollapseState"
+            },
+            "type": {
+              "type": "string",
+              "const": "ExpandCollapse"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "state"
+          ]
+        },
+        {
           "description": "Find the first dialog child of `scope` and close it.",
           "type": "object",
           "properties": {
@@ -1194,6 +1221,13 @@
           "minimum": 0
         }
       }
+    },
+    "ExpandCollapseState": {
+      "type": "string",
+      "enum": [
+        "expand",
+        "collapse"
+      ]
     },
     "ExtractAttribute": {
       "description": "Which text property to read from each matched element during an `Extract` action.",

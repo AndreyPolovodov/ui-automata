@@ -7,7 +7,8 @@ use super::{
 use uiautomation::UIAutomation;
 use uiautomation::inputs::{Keyboard, Mouse};
 use uiautomation::patterns::{
-    UIInvokePattern, UISelectionItemPattern, UITogglePattern, UIValuePattern, UIWindowPattern,
+    UIExpandCollapsePattern, UIInvokePattern, UISelectionItemPattern, UITogglePattern,
+    UIValuePattern, UIWindowPattern,
 };
 use uiautomation::types::{Point, ToggleState, TreeScope, WindowVisualState};
 
@@ -517,6 +518,19 @@ impl ui_automata::Element for UIElement {
             )))?
             .toggle()
             .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))
+    }
+
+    fn expand_collapse(&self, expand: bool) -> Result<(), ui_automata::AutomataError> {
+        let pat = self.inner.get_pattern::<UIExpandCollapsePattern>()
+            .map_err(|_| ui_automata::AutomataError::Internal(format!(
+                "ExpandCollapse: element '{}' does not support ExpandCollapsePattern",
+                self.inner.get_name().unwrap_or_default()
+            )))?;
+        if expand {
+            pat.expand().map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))
+        } else {
+            pat.collapse().map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))
+        }
     }
 
     fn hwnd(&self) -> Option<u64> {

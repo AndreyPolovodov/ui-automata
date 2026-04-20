@@ -720,6 +720,7 @@ const ACTIONS_SCOPE_SELECTOR: &[&str] = &[
     "Invoke",
     "SetValue",
     "SetToggle",
+    "ExpandCollapse",
     "Extract",
 ];
 const ACTIONS_SCOPE_ONLY: &[&str] = &[
@@ -740,6 +741,7 @@ const ALL_ACTION_TYPES: &[&str] = &[
     "Invoke",
     "SetValue",
     "SetToggle",
+    "ExpandCollapse",
     "ActivateWindow",
     "MinimizeWindow",
     "CloseWindow",
@@ -817,6 +819,11 @@ fn lint_action(
         "SetToggle" => {
             if get(v, "state").is_none() {
                 diags.push(diag_at(&v.span, path, "missing required field 'state'"));
+            }
+        }
+        "ExpandCollapse" => {
+            if get(v, "state").is_none() {
+                diags.push(diag_at(&v.span, path, "missing required field 'state' (expand or collapse)"));
             }
         }
         "ClickForegroundButton" | "ClickForeground" => {
