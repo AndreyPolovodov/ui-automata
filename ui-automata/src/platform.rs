@@ -81,6 +81,11 @@ pub trait Element: Clone + 'static {
         None
     }
 
+    /// UIA HelpText property (tooltip text). `None` if empty or unavailable.
+    fn help_text(&self) -> Option<String> {
+        None
+    }
+
     /// Bounding box as `(x, y, width, height)`.
     fn bounds(&self) -> Result<(i32, i32, i32, i32), AutomataError>;
 

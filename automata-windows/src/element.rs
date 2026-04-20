@@ -484,6 +484,13 @@ impl ui_automata::Element for UIElement {
             .ok()
             .filter(|s| !s.is_empty())
     }
+
+    fn help_text(&self) -> Option<String> {
+        self.inner
+            .get_help_text()
+            .ok()
+            .filter(|s| !s.is_empty())
+    }
 }
 
 // ── Scroll helpers ────────────────────────────────────────────────────────────
