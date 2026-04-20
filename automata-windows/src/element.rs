@@ -47,9 +47,55 @@ impl UIElement {
         self.inner.get_name().unwrap_or_default()
     }
 
-    /// Localized role string (e.g. "Button", "Pane", "ToolBar").
+    /// English role string (e.g. "button", "pane", "tool bar").
     pub fn role(&self) -> String {
-        self.inner.get_localized_control_type().unwrap_or_default()
+        use uiautomation::types::ControlType;
+        match self.inner.get_control_type() {
+            Ok(ControlType::AppBar)      => "app bar".into(),
+            Ok(ControlType::Button)      => "button".into(),
+            Ok(ControlType::Calendar)    => "calendar".into(),
+            Ok(ControlType::CheckBox)    => "check box".into(),
+            Ok(ControlType::ComboBox)    => "combo box".into(),
+            Ok(ControlType::Custom)      => "custom".into(),
+            Ok(ControlType::DataGrid)    => "data grid".into(),
+            Ok(ControlType::DataItem)    => "data item".into(),
+            Ok(ControlType::Document)    => "document".into(),
+            Ok(ControlType::Edit)        => "edit".into(),
+            Ok(ControlType::Group)       => "group".into(),
+            Ok(ControlType::Header)      => "header".into(),
+            Ok(ControlType::HeaderItem)  => "header item".into(),
+            Ok(ControlType::Hyperlink)   => "hyperlink".into(),
+            Ok(ControlType::Image)       => "image".into(),
+            Ok(ControlType::List)        => "list".into(),
+            Ok(ControlType::ListItem)    => "list item".into(),
+            Ok(ControlType::Menu)        => "menu".into(),
+            Ok(ControlType::MenuBar)     => "menu bar".into(),
+            Ok(ControlType::MenuItem)    => "menu item".into(),
+            Ok(ControlType::Pane)        => "pane".into(),
+            Ok(ControlType::ProgressBar) => "progress bar".into(),
+            Ok(ControlType::RadioButton) => "radio button".into(),
+            Ok(ControlType::ScrollBar)   => "scroll bar".into(),
+            Ok(ControlType::SemanticZoom)=> "semantic zoom".into(),
+            Ok(ControlType::Separator)   => "separator".into(),
+            Ok(ControlType::Slider)      => "slider".into(),
+            Ok(ControlType::Spinner)     => "spinner".into(),
+            Ok(ControlType::SplitButton) => "split button".into(),
+            Ok(ControlType::StatusBar)   => "status bar".into(),
+            Ok(ControlType::Tab)         => "tab".into(),
+            Ok(ControlType::TabItem)     => "tab item".into(),
+            Ok(ControlType::Table)       => "table".into(),
+            Ok(ControlType::Text)        => "text".into(),
+            Ok(ControlType::Thumb)       => "thumb".into(),
+            Ok(ControlType::TitleBar)    => "title bar".into(),
+            Ok(ControlType::ToolBar)     => "tool bar".into(),
+            Ok(ControlType::ToolTip)     => "tool tip".into(),
+            Ok(ControlType::Tree)        => "tree".into(),
+            Ok(ControlType::TreeItem)    => "tree item".into(),
+            Ok(ControlType::Window) => {
+                if self.inner.is_dialog().unwrap_or(false) { "dialog".into() } else { "window".into() }
+            }
+            _ => self.inner.get_localized_control_type().unwrap_or_default(),
+        }
     }
 
     pub fn id(&self) -> Option<String> {
@@ -174,7 +220,7 @@ impl ui_automata::Element for UIElement {
     }
 
     fn role(&self) -> String {
-        self.inner.get_localized_control_type().unwrap_or_default()
+        self.role()
     }
 
     fn text(&self) -> Result<String, ui_automata::AutomataError> {
