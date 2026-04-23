@@ -29,7 +29,7 @@ mod win {
     use uiautomation::types::Point;
 
     use super::ElementInfo;
-    use crate::Result;
+    use crate::{Result, UIElement};
 
     /// Queries UIA for the element under a given screen point.
     /// Create once per thread; COM must be initialised before calling `new`.
@@ -75,12 +75,7 @@ mod win {
 
     fn element_info(element: &uiautomation::UIElement) -> ElementInfo {
         let name = element.get_name().unwrap_or_default();
-        let role = element.get_localized_control_type().unwrap_or_else(|_| {
-            element
-                .get_control_type()
-                .map(|ct| format!("{ct:?}"))
-                .unwrap_or_default()
-        });
+        let role = UIElement::new(element.clone()).role();
         let class = element.get_classname().unwrap_or_default();
         let automation_id = element.get_automation_id().unwrap_or_default();
         let enabled = element.is_enabled().unwrap_or(false);

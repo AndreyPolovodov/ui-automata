@@ -95,7 +95,10 @@ impl UIElement {
             Ok(ControlType::Window) => {
                 if self.inner.is_dialog().unwrap_or(false) { "dialog".into() } else { "window".into() }
             }
-            _ => self.inner.get_localized_control_type().unwrap_or_default(),
+            _ => match self.inner.get_control_type() {
+                Ok(ct) => format!("{ct:?}").to_lowercase(),
+                Err(_) => String::new(),
+            },
         }
     }
 
@@ -504,6 +507,17 @@ impl ui_automata::Element for UIElement {
                 let state = tp.get_toggle_state()
                     .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))?;
                 Ok(Some(state == ToggleState::On))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn is_selected(&self) -> Result<Option<bool>, ui_automata::AutomataError> {
+        match self.inner.get_pattern::<UISelectionItemPattern>() {
+            Ok(sp) => {
+                let selected = sp.is_selected()
+                    .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))?;
+                Ok(Some(selected))
             }
             Err(_) => Ok(None),
         }

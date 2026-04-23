@@ -5,7 +5,7 @@ use windows::Win32::Foundation::HWND;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::IsIconic;
 
-use crate::Result;
+use crate::{Result, UIElement};
 use crate::process::get_process_name;
 use crate::util::window_pane_condition;
 
@@ -43,9 +43,7 @@ pub fn application_windows() -> Result<Vec<WindowInfo>> {
             get_process_name(pid as i32).unwrap_or_else(|_| format!("unknown-{pid}"));
 
         let title = element.get_name().unwrap_or_default();
-        let control_type = element
-            .get_localized_control_type()
-            .unwrap_or_else(|_| format!("{:?}", element.get_control_type().ok()));
+        let control_type = UIElement::new(element.clone()).role();
         let automation_id = element.get_automation_id().unwrap_or_default();
         let class = element.get_classname().unwrap_or_default();
         let hwnd = element

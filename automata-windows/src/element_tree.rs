@@ -297,7 +297,7 @@ pub fn find_elements(
             }
 
             let name = el.inner.get_name().ok().filter(|s| !s.is_empty());
-            let role = el.inner.get_localized_control_type().unwrap_or_default();
+            let role = WinElem::new(el.inner.clone()).role();
             let value = el
                 .inner
                 .get_pattern::<UIValuePattern>()
@@ -330,7 +330,7 @@ pub fn find_elements(
                             }
                             anc.push(AncestorInfo {
                                 name: parent.get_name().ok().filter(|s| !s.is_empty()),
-                                role: parent.get_localized_control_type().unwrap_or_default(),
+                                role: WinElem::new(parent.clone()).role(),
                                 automation_id: parent
                                     .get_automation_id()
                                     .ok()
@@ -440,7 +440,7 @@ fn collect_siblings_of(el: &UiaElement) -> Vec<SiblingInfo> {
         })
         .map(|child| SiblingInfo {
             name: child.get_name().ok().filter(|s| !s.is_empty()),
-            role: child.get_localized_control_type().unwrap_or_default(),
+            role: WinElem::new(child.clone()).role(),
             value: child
                 .get_pattern::<UIValuePattern>()
                 .ok()
@@ -457,9 +457,7 @@ fn walk_element(
     depth: usize,
 ) -> Result<ElementNode> {
     let control_type = element.get_control_type().ok();
-    let role = element
-        .get_localized_control_type()
-        .unwrap_or_else(|_| format!("{:?}", control_type));
+    let role = WinElem::new(element.clone()).role();
     let name = element.get_name().unwrap_or_default();
     let (x, y, width, height) = element
         .get_bounding_rectangle()
