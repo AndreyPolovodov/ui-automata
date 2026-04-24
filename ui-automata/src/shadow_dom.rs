@@ -351,10 +351,13 @@ impl<D: Desktop> ShadowDom<D> {
         let sel_key = selector.to_string();
 
         if let Some(cached) = self.nodes.found(&key, &sel_key) {
-            if is_live(&cached) {
-                return Ok(Some(cached));
-            }
-            // Stale. Try narrow re-resolution from the cached step-parent.
+            // Do not trust the cached element handle directly: WPF automation peers can
+            // remain "live" (is_visible().is_ok(), has_parent() true) after the underlying
+            // visual element has been detached and replaced by a new peer.  Always
+            // re-validate by re-running the last selector step from the cached step-parent.
+            // This is slightly more expensive than a direct handle reuse but is O(siblings)
+            // rather than O(whole subtree), and guarantees correctness for toggled buttons,
+            // dynamic lists, and any other WPF replace-on-state-change patterns.
             if let Some(step_parent) = self.nodes.found_parent(&key, &sel_key) {
                 if is_live(&step_parent) {
                     if let Some(el) = selector.find_one_from_step_parent(&step_parent) {
@@ -368,14 +371,19 @@ impl<D: Desktop> ShadowDom<D> {
                     self.nodes.remove_found(&key, &sel_key);
                     // Fall through to full DFS in case element moved elsewhere.
                 } else {
-                    // Both element and step-parent are stale.
+                    // Step-parent is also stale — do not give up; the element may have
+                    // re-appeared under a new parent (WPF dynamic item replacement).
                     self.nodes.remove_found(&key, &sel_key);
-                    return Ok(None);
+                    // Fall through to full DFS.
                 }
             } else {
-                // No step-parent stored (root-step match) — element is gone.
+                // No step-parent stored (root-step match): fall back to checking the
+                // element handle directly, then full DFS if stale.
+                if is_live(&cached) {
+                    return Ok(Some(cached));
+                }
                 self.nodes.remove_found(&key, &sel_key);
-                return Ok(None);
+                // Fall through to full DFS.
             }
         }
 
