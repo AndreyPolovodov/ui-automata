@@ -146,6 +146,13 @@ pub trait Element: Clone + 'static {
         Ok(None)
     }
 
+    /// Query the selection state of this element (RadioButton, ListItem, etc.).
+    /// Returns `Some(true)` if selected, `Some(false)` if not selected,
+    /// `None` if the element does not support `SelectionItemPattern`.
+    fn is_selected(&self) -> Result<Option<bool>, AutomataError> {
+        Ok(None)
+    }
+
     /// Toggle this element via `ITogglePattern::Toggle()`.
     /// Returns `Err` if `TogglePattern` is not supported.
     /// Prefer `SetToggle` action for idempotent state setting.

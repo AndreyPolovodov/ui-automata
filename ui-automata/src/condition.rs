@@ -176,6 +176,18 @@ pub enum Condition {
         state: Option<bool>,
     },
 
+    /// True when the element at `selector` under `scope` has a selection state matching `state`.
+    /// Uses `SelectionItemPattern` — works for RadioButton, ListItem, TabItem, etc.
+    /// `state: true` = selected, `state: false` = not selected.
+    /// If `state` is omitted, passes for any selection state (verifies SelectionItemPattern is supported).
+    ElementSelected {
+        scope: String,
+        selector: SelectorPath,
+        /// `Some(true)` = selected, `Some(false)` = not selected, `None` = any.
+        #[serde(default)]
+        state: Option<bool>,
+    },
+
     /// Any application window matches the given attribute filters.
     /// YAML: `type: WindowWithAttribute` + at least one of:
     ///   - `title`: `TitleMatch` against the window's name
@@ -325,6 +337,14 @@ impl TryFrom<serde_yaml::Value> for Condition {
             "ElementChecked" => {
                 let state = map.get("state").and_then(|v| v.as_bool());
                 Ok(Condition::ElementChecked {
+                    scope: req_str("scope")?,
+                    selector: req_selector("selector")?,
+                    state,
+                })
+            }
+            "ElementSelected" => {
+                let state = map.get("state").and_then(|v| v.as_bool());
+                Ok(Condition::ElementSelected {
                     scope: req_str("scope")?,
                     selector: req_selector("selector")?,
                     state,
@@ -508,6 +528,7 @@ impl Condition {
             | Condition::ElementHasText { scope, .. }
             | Condition::ElementHasChildren { scope, .. }
             | Condition::ElementChecked { scope, .. }
+            | Condition::ElementSelected { scope, .. }
             | Condition::DialogPresent { scope }
             | Condition::DialogAbsent { scope } => Some(scope),
             _ => None,
@@ -537,6 +558,11 @@ impl Condition {
                 Some(true)  => format!("ElementChecked({scope}:{selector} on)"),
                 Some(false) => format!("ElementChecked({scope}:{selector} off)"),
                 None        => format!("ElementChecked({scope}:{selector})"),
+            },
+            Condition::ElementSelected { scope, selector, state } => match state {
+                Some(true)  => format!("ElementSelected({scope}:{selector} selected)"),
+                Some(false) => format!("ElementSelected({scope}:{selector} not-selected)"),
+                None        => format!("ElementSelected({scope}:{selector})"),
             },
             Condition::WindowWithAttribute {
                 title,
@@ -639,6 +665,17 @@ impl Condition {
                 Ok(match (ts, state) {
                     (None, _) => false,           // no TogglePattern → not a toggle element
                     (Some(_), None) => true,      // has TogglePattern, any state
+                    (Some(actual), Some(expected)) => actual == *expected,
+                })
+            }
+            Condition::ElementSelected { scope, selector, state } => {
+                let sel = find_in_scope(dom, desktop, scope, selector)?
+                    .map(|el| el.is_selected())
+                    .transpose()?
+                    .flatten();
+                Ok(match (sel, state) {
+                    (None, _) => false,           // no SelectionItemPattern → not selectable
+                    (Some(_), None) => true,      // has SelectionItemPattern, any state
                     (Some(actual), Some(expected)) => actual == *expected,
                 })
             }

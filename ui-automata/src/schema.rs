@@ -186,6 +186,34 @@ impl JsonSchema for Condition {
             }));
         }
 
+        // ElementChecked — TogglePattern state check (CheckBox, ToggleButton)
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = checked/on, `state: false` = unchecked/off. Omit `state` to verify TogglePattern is supported without checking the value.",
+            "required": ["type", "scope", "selector"],
+            "properties": {
+                "type": { "const": "ElementChecked" },
+                "scope": scope_s(),
+                "selector": selector_s(),
+                "state": { "type": "boolean", "description": "Expected toggle state: true = on/checked, false = off/unchecked." }
+            },
+            "additionalProperties": false
+        }));
+
+        // ElementSelected — SelectionItemPattern state check (RadioButton, ListItem, TabItem)
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the matched element's selection state matches `state`. Uses SelectionItemPattern — works for RadioButton, ListItem, TabItem, etc. `state: true` = selected, `state: false` = not selected. Omit `state` to verify SelectionItemPattern is supported without checking the value.",
+            "required": ["type", "scope", "selector"],
+            "properties": {
+                "type": { "const": "ElementSelected" },
+                "scope": scope_s(),
+                "selector": selector_s(),
+                "state": { "type": "boolean", "description": "Expected selection state: true = selected, false = not selected." }
+            },
+            "additionalProperties": false
+        }));
+
         // ForegroundIsDialog — scope is parsed but ignored at runtime; only fg window role/title matter
         variants.push(json!({
             "type": "object",

@@ -23,6 +23,13 @@
       ],
       "default": null
     },
+    "global_recovery_handlers": {
+      "description": "Recovery handlers that fire for every phase without per-phase opt-in.\nApplied after phase-local handlers in the resolution order.\nHandlers propagate into subflows — use for workflow-wide popup dismissal etc.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/YamlRecoveryHandler"
+      }
+    },
     "launch": {
       "description": "Optional application to launch before running phases. The executor waits for a window\nbelonging to the launched PID to appear before proceeding.",
       "anyOf": [
@@ -1000,6 +1007,60 @@
           ]
         },
         {
+          "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = checked/on, `state: false` = unchecked/off. Omit `state` to verify TogglePattern is supported without checking the value.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "state": {
+              "description": "Expected toggle state: true = on/checked, false = off/unchecked.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "ElementChecked"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
+          "description": "True when the matched element's selection state matches `state`. Uses SelectionItemPattern — works for RadioButton, ListItem, TabItem, etc. `state: true` = selected, `state: false` = not selected. Omit `state` to verify SelectionItemPattern is supported without checking the value.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "state": {
+              "description": "Expected selection state: true = selected, false = not selected.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "ElementSelected"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector"
+          ]
+        },
+        {
           "description": "True when the OS foreground window has role=dialog. Optionally also checks the dialog title.",
           "type": "object",
           "properties": {
@@ -1420,6 +1481,11 @@
           "description": "Treat the step as failed — propagate the error.",
           "type": "string",
           "const": "fail"
+        },
+        {
+          "description": "Restart the entire phase from step 1.\nUse when the recovery action may invalidate state that earlier steps established\n(e.g. dismissing a dialog that closed an open dropdown).",
+          "type": "string",
+          "const": "retry_phase"
         }
       ]
     },
