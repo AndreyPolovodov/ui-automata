@@ -312,15 +312,20 @@ fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
         }
     }
 
-    // Collect declared recovery handler names.
-    let handler_names: HashSet<String> = get(v, "recovery_handlers")
-        .and_then(|r| r.data.as_mapping())
-        .map(|m| {
-            m.keys()
-                .filter_map(|k| k.data.as_str().map(|s| s.to_owned()))
-                .collect()
+    // Collect declared recovery handler names (both local and global maps).
+    let handler_names: HashSet<String> = ["recovery_handlers", "global_recovery_handlers"]
+        .iter()
+        .flat_map(|key| {
+            get(v, key)
+                .and_then(|r| r.data.as_mapping())
+                .into_iter()
+                .flat_map(|m| {
+                    m.keys()
+                        .filter_map(|k| k.data.as_str().map(|s| s.to_owned()))
+                        .collect::<Vec<_>>()
+                })
         })
-        .unwrap_or_default();
+        .collect();
 
     // Lint phases, tracking which anchors are currently mounted.
     if let Some(phases_seq) = get(v, "phases").and_then(|p| p.data.as_sequence()) {
@@ -355,35 +360,37 @@ fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
         }
     }
 
-    // Lint recovery handlers.
+    // Lint recovery handlers (both local and global maps).
     // Handlers fire from within phase execution, so can reference any declared anchor.
     // Pass anchors as mounted to suppress false "not mounted" diagnostics.
-    if let Some(handlers_map) = get(v, "recovery_handlers").and_then(|r| r.data.as_mapping()) {
-        for (key, handler_v) in handlers_map {
-            if let Some(name) = key.data.as_str() {
-                let path = format!("recovery_handlers.{name}");
-                if let Some(trigger) = get(handler_v, "trigger") {
-                    lint_condition(
-                        trigger,
-                        &format!("{path}.trigger"),
-                        &anchors,
-                        &anchors,
-                        &params,
-                        diags,
-                    );
-                }
-                if let Some(actions_seq) =
-                    get(handler_v, "actions").and_then(|a| a.data.as_sequence())
-                {
-                    for (j, action) in actions_seq.iter().enumerate() {
-                        lint_action(
-                            action,
-                            &format!("{path}.actions[{j}]"),
+    for top_key in &["recovery_handlers", "global_recovery_handlers"] {
+        if let Some(handlers_map) = get(v, top_key).and_then(|r| r.data.as_mapping()) {
+            for (key, handler_v) in handlers_map {
+                if let Some(name) = key.data.as_str() {
+                    let path = format!("{top_key}.{name}");
+                    if let Some(trigger) = get(handler_v, "trigger") {
+                        lint_condition(
+                            trigger,
+                            &format!("{path}.trigger"),
                             &anchors,
                             &anchors,
                             &params,
                             diags,
                         );
+                    }
+                    if let Some(actions_seq) =
+                        get(handler_v, "actions").and_then(|a| a.data.as_sequence())
+                    {
+                        for (j, action) in actions_seq.iter().enumerate() {
+                            lint_action(
+                                action,
+                                &format!("{path}.actions[{j}]"),
+                                &anchors,
+                                &anchors,
+                                &params,
+                                diags,
+                            );
+                        }
                     }
                 }
             }
@@ -941,6 +948,7 @@ const ALL_CONDITION_TYPES: &[&str] = &[
     "ElementHasText",
     "ElementHasChildren",
     "ElementChecked",
+    "ElementSelected",
     "WindowWithAttribute",
     "ProcessRunning",
     "WindowClosed",
@@ -986,7 +994,7 @@ fn lint_condition(
     }
 
     match type_str {
-        "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" | "ElementChecked" => {
+        "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" | "ElementChecked" | "ElementSelected" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
                 check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }

@@ -891,6 +891,175 @@ phases:
     );
 }
 
+/// `resume: retry_phase` — recovery fires on step 2, restarts the phase from
+/// step 1. The target element is revived between the first and second pass;
+/// on the second pass both steps succeed.
+#[test]
+fn recovery_retry_phase_restarts_from_step_1() {
+    use ui_automata::mock::MockElement;
+
+    let btn = MockElement::leaf("button", "Target");
+    btn.kill(); // dead on first pass → step 2 times out → retry_phase
+
+    let desktop = ui_automata::mock::MockDesktop::new(vec![MockElement::parent(
+        "window",
+        "App",
+        vec![btn.clone()],
+    )]);
+
+    let yaml = r#"
+name: test
+anchors:
+  app:
+    type: Root
+    selector: "[name=App]"
+recovery_handlers:
+  restart:
+    trigger:
+      type: ElementFound
+      scope: app
+      selector: "[name=App]"
+    actions: []
+    resume: retry_phase
+phases:
+  - name: main
+    mount: [app]
+    recovery:
+      handlers: [restart]
+    steps:
+      - intent: step 1 — always succeeds
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: "[name=App]"
+      - intent: step 2 — times out on first pass, succeeds after restart
+        action:
+          type: Click
+          scope: app
+          selector: ">> [role=button][name=Target]"
+        expect:
+          type: ElementFound
+          scope: app
+          selector: ">> [role=button][name=Target]"
+        timeout: 100ms
+"#;
+
+    // Revive the element after the first timeout so the second pass succeeds.
+    let b = btn.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        b.revive();
+    });
+
+    let (result, events) = run(yaml, desktop);
+    assert!(
+        result.is_ok(),
+        "retry_phase must restart phase and succeed on second pass: {result:?}"
+    );
+    assert_eq!(
+        event_names(&events),
+        ["started:main", "completed:main", "Completed"]
+    );
+}
+
+/// `resume: retry_phase` respects `limit` — once `recovery_count` reaches the
+/// limit the step fails normally instead of restarting forever.
+#[test]
+fn recovery_retry_phase_max_recoveries_exceeded_fails() {
+    let yaml = r#"
+name: test
+anchors:
+  app:
+    type: Root
+    selector: "[name=App]"
+recovery_handlers:
+  always_restart:
+    trigger:
+      type: ElementFound
+      scope: app
+      selector: "[name=App]"
+    actions: []
+    resume: retry_phase
+phases:
+  - name: main
+    mount: [app]
+    recovery:
+      handlers: [always_restart]
+      limit: 2
+    steps:
+      - intent: always times out; recovery restarts until limit
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: ">> [role=button][name=NeverExists]"
+        timeout: 50ms
+"#;
+    let desktop = app_desktop();
+    let (result, events) = run(yaml, desktop);
+    assert!(
+        result.is_err(),
+        "must fail once max_recoveries is exhausted"
+    );
+    assert_eq!(
+        event_names(&events),
+        ["started:main", "failed:main", "Failed"]
+    );
+}
+
+/// `global_recovery_handlers` fires for a phase that has no `recovery:` opt-in.
+/// The handler skips the failing step; the phase completes successfully.
+#[test]
+fn global_recovery_handler_fires_without_phase_opt_in() {
+    let yaml = r#"
+name: test
+anchors:
+  app:
+    type: Root
+    selector: "[name=App]"
+global_recovery_handlers:
+  global_skip:
+    trigger:
+      type: ElementFound
+      scope: app
+      selector: "[name=App]"
+    actions: []
+    resume: skip_step
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: times out; global handler skips it without phase opt-in
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: ">> [role=button][name=NeverExists]"
+        timeout: 50ms
+      - intent: must run after global skip
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: "[name=App]"
+"#;
+    let desktop = app_desktop();
+    let (result, events) = run(yaml, desktop);
+    assert!(
+        result.is_ok(),
+        "global recovery handler must fire without phase opt-in: {result:?}"
+    );
+    assert_eq!(
+        event_names(&events),
+        ["started:main", "completed:main", "Completed"]
+    );
+}
+
 // ── fallback + on_success: return_phase ───────────────────────────────────────
 
 /// When the primary action times out but the fallback satisfies the expect,

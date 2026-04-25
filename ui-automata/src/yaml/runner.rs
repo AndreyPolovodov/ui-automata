@@ -226,6 +226,19 @@ impl WorkflowFile {
             }
         }
 
+        // Push this workflow's global recovery handlers onto the executor stack.
+        // They fire for every phase (and all subflows) without per-phase opt-in.
+        // Placed after the launch block so early launch-timeout returns don't need cleanup.
+        let global_handlers_base = executor.global_handlers.len();
+        for (name, h) in &self.global_recovery_handlers {
+            executor.global_handlers.push(RecoveryHandler {
+                name: name.clone(),
+                trigger: h.trigger.clone(),
+                actions: h.actions.clone(),
+                resume: h.resume,
+            });
+        }
+
         // Run each phase.
         // `finally: true` phases run unconditionally even when an earlier phase has failed.
         // Normal phase errors set `workflow_error` and skip remaining normal phases.
@@ -473,6 +486,9 @@ impl WorkflowFile {
         executor.cleanup_depth(depth);
         // Restore depth to parent level.
         executor.dom.set_depth(depth.saturating_sub(1));
+
+        // Pop this workflow's global recovery handlers from the executor stack.
+        executor.global_handlers.truncate(global_handlers_base);
 
         match workflow_error {
             Some(e) => {

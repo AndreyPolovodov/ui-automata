@@ -31,4 +31,9 @@ pub enum ResumeStrategy {
 
     /// Treat the step as failed — propagate the error.
     Fail,
+
+    /// Restart the entire phase from step 1.
+    /// Use when the recovery action may invalidate state that earlier steps established
+    /// (e.g. dismissing a dialog that closed an open dropdown).
+    RetryPhase,
 }

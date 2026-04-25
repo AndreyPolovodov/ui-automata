@@ -99,6 +99,11 @@ pub struct WorkflowFile {
     /// handler's `trigger` condition is true. Phases opt in via their `recovery: handlers:` list.
     #[serde(default)]
     pub recovery_handlers: HashMap<String, YamlRecoveryHandler>,
+    /// Recovery handlers that fire for every phase without per-phase opt-in.
+    /// Applied after phase-local handlers in the resolution order.
+    /// Handlers propagate into subflows — use for workflow-wide popup dismissal etc.
+    #[serde(default)]
+    pub global_recovery_handlers: HashMap<String, YamlRecoveryHandler>,
     /// Optional application to launch before running phases. The executor waits for a window
     /// belonging to the launched PID to appear before proceeding.
     pub launch: Option<LaunchConfig>,
@@ -628,6 +633,11 @@ impl WorkflowFile {
                     action.apply_outputs(&outputs_set);
                 }
             }
+            for handler in wf.global_recovery_handlers.values_mut() {
+                for action in &mut handler.actions {
+                    action.apply_outputs(&outputs_set);
+                }
+            }
         }
 
         Ok(wf)
@@ -932,6 +942,27 @@ phases: []
 "#,
         );
         let handler = &wf.recovery_handlers["dismiss_error"];
+        assert!(matches!(handler.resume, ResumeStrategy::RetryStep));
+    }
+
+    #[test]
+    fn global_recovery_handler_parses() {
+        let wf = parse(
+            r#"
+name: test
+anchors:
+  main: { type: Root, selector: "*" }
+global_recovery_handlers:
+  dismiss_popup:
+    trigger: { type: ElementFound, scope: main, selector: ">> [name~=Warning]" }
+    actions:
+      - { type: ClickForegroundButton, name: OK }
+    resume: retry_step
+phases: []
+"#,
+        );
+        assert!(wf.global_recovery_handlers.contains_key("dismiss_popup"));
+        let handler = &wf.global_recovery_handlers["dismiss_popup"];
         assert!(matches!(handler.resume, ResumeStrategy::RetryStep));
     }
 }

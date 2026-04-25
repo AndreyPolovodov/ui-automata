@@ -14,6 +14,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 enum StepOutcome {
     Continue,
     ReturnPhase,
+    RestartPhase,
 }
 
 /// Workflow-level mutable state: output, locals, and per-run flags.
@@ -89,7 +90,9 @@ impl<D: Desktop> Executor<D> {
         let total = plan.steps.len();
         let mut recovery_count: u32 = 0;
         let result = (|| {
-            for (i, step) in plan.steps.iter().enumerate() {
+            let mut i = 0;
+            while i < total {
+                let step = &plan.steps[i];
                 let outcome = self.run_step(
                     step,
                     &plan.recovery_handlers,
@@ -101,8 +104,13 @@ impl<D: Desktop> Executor<D> {
                     &plan.default_retry,
                     state,
                 )?;
-                if outcome == StepOutcome::ReturnPhase {
-                    break;
+                match outcome {
+                    StepOutcome::Continue => i += 1,
+                    StepOutcome::ReturnPhase => break,
+                    StepOutcome::RestartPhase => {
+                        self.log_info(&format!("plan '{}': restarting from step 1 (retry_phase)", plan.name));
+                        i = 0;
+                    }
                 }
             }
             Ok(())
@@ -269,6 +277,10 @@ impl<D: Desktop> Executor<D> {
                             let msg = format!("{label}: recovery handler '{name}' instructed Fail");
                             log::debug!("{msg}");
                             return Err(AutomataError::Internal(msg));
+                        }
+                        ResumeStrategy::RetryPhase => {
+                            self.log_info(&format!("{label}: retry_phase — restarting phase from step 1"));
+                            return Ok(StepOutcome::RestartPhase);
                         }
                     }
                 }
