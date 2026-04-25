@@ -367,6 +367,10 @@ fn lint_workflow(v: &MarkedYaml<'_>, diags: &mut Vec<LintDiag>) {
         if let Some(handlers_map) = get(v, top_key).and_then(|r| r.data.as_mapping()) {
             for (key, handler_v) in handlers_map {
                 if let Some(name) = key.data.as_str() {
+                    // String value → subflow path; skip inline linting.
+                    if handler_v.data.as_str().is_some() {
+                        continue;
+                    }
                     let path = format!("{top_key}.{name}");
                     if let Some(trigger) = get(handler_v, "trigger") {
                         lint_condition(

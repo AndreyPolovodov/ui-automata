@@ -7,7 +7,7 @@ use crate::{
     executor::WorkflowState, platform::Element,
 };
 
-use super::{PhaseEvent, WorkflowFile, YamlPhase};
+use super::{PhaseEvent, WorkflowFile, YamlPhase, YamlRecoveryHandler, YamlRecoveryHandlerDef};
 
 use crate::action::sub_output as sub_action_output;
 
@@ -230,12 +230,33 @@ impl WorkflowFile {
         // They fire for every phase (and all subflows) without per-phase opt-in.
         // Placed after the launch block so early launch-timeout returns don't need cleanup.
         let global_handlers_base = executor.global_handlers.len();
-        for (name, h) in &self.global_recovery_handlers {
+        for (name, h_def) in &self.global_recovery_handlers {
+            let (trigger, actions, resume) = match h_def {
+                YamlRecoveryHandlerDef::Inline(h) => {
+                    (h.trigger.clone(), h.actions.clone(), h.resume)
+                }
+                YamlRecoveryHandlerDef::Subflow(path) => {
+                    let file_path = resolve_subflow_path(path, source_path.as_deref());
+                    let raw = std::fs::read_to_string(&file_path).map_err(|e| {
+                        AutomataError::Internal(format!(
+                            "global recovery handler '{name}': cannot read '{}': {e}",
+                            file_path.display()
+                        ))
+                    })?;
+                    let h: YamlRecoveryHandler = serde_yaml::from_str(&raw).map_err(|e| {
+                        AutomataError::Internal(format!(
+                            "global recovery handler '{name}': parse error in '{}': {e}",
+                            file_path.display()
+                        ))
+                    })?;
+                    (h.trigger, h.actions, h.resume)
+                }
+            };
             executor.global_handlers.push(RecoveryHandler {
                 name: name.clone(),
-                trigger: h.trigger.clone(),
-                actions: h.actions.clone(),
-                resume: h.resume,
+                trigger,
+                actions,
+                resume,
             });
         }
 

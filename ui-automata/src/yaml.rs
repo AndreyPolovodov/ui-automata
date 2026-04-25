@@ -102,8 +102,12 @@ pub struct WorkflowFile {
     /// Recovery handlers that fire for every phase without per-phase opt-in.
     /// Applied after phase-local handlers in the resolution order.
     /// Handlers propagate into subflows — use for workflow-wide popup dismissal etc.
+    ///
+    /// Each value is either an inline handler definition or a path to a YAML file
+    /// (resolved relative to this workflow file), enabling reuse across workflows:
+    /// `dismiss_warning: handlers/handler_dismiss_warning.yml`
     #[serde(default)]
-    pub global_recovery_handlers: HashMap<String, YamlRecoveryHandler>,
+    pub global_recovery_handlers: HashMap<String, YamlRecoveryHandlerDef>,
     /// Optional application to launch before running phases. The executor waits for a window
     /// belonging to the launched PID to appear before proceeding.
     pub launch: Option<LaunchConfig>,
@@ -349,6 +353,30 @@ pub struct YamlRecoveryHandler {
     pub actions: Vec<crate::Action>,
     /// What the executor does after the recovery actions complete.
     pub resume: ResumeStrategy,
+}
+
+/// A `global_recovery_handlers` map value: either an inline handler or a subflow path.
+///
+/// When the value is a string, it is treated as a path to a YAML file containing
+/// trigger/actions/resume fields (same as an inline `YamlRecoveryHandler`).
+/// The path is resolved relative to the workflow file, just like `subflow:` in phases.
+///
+/// ```yaml
+/// global_recovery_handlers:
+///   dismiss_warning: handlers/handler_dismiss_warning.yml  # subflow-style
+///   inline_handler:
+///     trigger: { type: ElementFound, scope: shell, selector: ">> [name~=Error]" }
+///     actions:
+///       - { type: ClickForegroundButton, name: OK }
+///     resume: retry_step
+/// ```
+#[derive(Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum YamlRecoveryHandlerDef {
+    /// Path to a YAML file containing a handler definition (trigger/actions/resume).
+    Subflow(String),
+    /// Inline handler definition.
+    Inline(YamlRecoveryHandler),
 }
 
 /// Phase-level recovery configuration.
@@ -633,9 +661,11 @@ impl WorkflowFile {
                     action.apply_outputs(&outputs_set);
                 }
             }
-            for handler in wf.global_recovery_handlers.values_mut() {
-                for action in &mut handler.actions {
-                    action.apply_outputs(&outputs_set);
+            for handler_def in wf.global_recovery_handlers.values_mut() {
+                if let YamlRecoveryHandlerDef::Inline(handler) = handler_def {
+                    for action in &mut handler.actions {
+                        action.apply_outputs(&outputs_set);
+                    }
                 }
             }
         }
@@ -946,6 +976,26 @@ phases: []
     }
 
     #[test]
+    fn global_recovery_handler_subflow_path_parses() {
+        let wf = parse(
+            r#"
+name: test
+anchors:
+  main: { type: Root, selector: "*" }
+global_recovery_handlers:
+  dismiss_popup: handlers/handler_dismiss_popup.yml
+phases: []
+"#,
+        );
+        match &wf.global_recovery_handlers["dismiss_popup"] {
+            YamlRecoveryHandlerDef::Subflow(path) => {
+                assert_eq!(path, "handlers/handler_dismiss_popup.yml")
+            }
+            _ => panic!("expected Subflow variant"),
+        }
+    }
+
+    #[test]
     fn global_recovery_handler_parses() {
         let wf = parse(
             r#"
@@ -962,7 +1012,10 @@ phases: []
 "#,
         );
         assert!(wf.global_recovery_handlers.contains_key("dismiss_popup"));
-        let handler = &wf.global_recovery_handlers["dismiss_popup"];
+        let handler = match &wf.global_recovery_handlers["dismiss_popup"] {
+            YamlRecoveryHandlerDef::Inline(h) => h,
+            _ => panic!("expected inline handler"),
+        };
         assert!(matches!(handler.resume, ResumeStrategy::RetryStep));
     }
 }

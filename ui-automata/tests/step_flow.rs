@@ -1107,3 +1107,65 @@ phases:
         ["started:main", "completed:main", "Completed"]
     );
 }
+
+// ── global_recovery_handlers subflow ─────────────────────────────────────────
+
+/// A `global_recovery_handlers` entry that references an external YAML file
+/// behaves identically to an inline handler: fires on timeout, skips the step.
+#[test]
+fn global_recovery_handler_subflow_path_fires() {
+    // Write the handler definition to a temp file.
+    let handler_yml = r#"
+trigger:
+  type: ElementFound
+  scope: app
+  selector: "[name=App]"
+actions: []
+resume: skip_step
+"#;
+    let handler_path = std::env::temp_dir().join("test_handler_subflow.yml");
+    std::fs::write(&handler_path, handler_yml).expect("write handler file");
+    let handler_path_str = handler_path.to_string_lossy().replace('\\', "/");
+
+    let yaml = format!(
+        r#"
+name: test
+anchors:
+  app:
+    type: Root
+    selector: "[name=App]"
+global_recovery_handlers:
+  file_handler: "{handler_path_str}"
+phases:
+  - name: main
+    mount: [app]
+    steps:
+      - intent: times out; file handler skips it
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: ">> [role=button][name=NeverExists]"
+        timeout: 50ms
+      - intent: must run after file-handler skip
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: "[name=App]"
+"#
+    );
+
+    let desktop = app_desktop();
+    let (result, events) = run(&yaml, desktop);
+    assert!(
+        result.is_ok(),
+        "global recovery handler loaded from file must fire: {result:?}"
+    );
+    assert_eq!(
+        event_names(&events),
+        ["started:main", "completed:main", "Completed"]
+    );
+}
