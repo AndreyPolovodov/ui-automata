@@ -95,6 +95,11 @@ fn main() {
         #[arg(long)]
         log_path: Option<PathBuf>,
 
+        /// If a SnapshotMatches golden file is missing, create it from the actual
+        /// instead of failing. Use when setting up a new test for the first time.
+        #[arg(long)]
+        create_goldens: bool,
+
         /// Script parameter overrides (everything after `--`).
         /// Format: --key value  (kebab-case mapped to snake_case)
         #[arg(last = true)]
@@ -114,6 +119,10 @@ fn main() {
             let value = iter.next().cloned().unwrap_or_default();
             params.insert(snake, value);
         }
+    }
+
+    if cli.create_goldens {
+        params.insert("__create_goldens".into(), "1".into());
     }
 
     // ── Detect pipe mode ───────────────────────────────────────────────────

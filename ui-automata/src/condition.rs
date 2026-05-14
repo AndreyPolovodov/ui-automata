@@ -818,6 +818,13 @@ impl Condition {
                 Ok(false)
             }
             Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
+                let golden_path = std::path::Path::new(golden.as_str());
+                if !golden_path.exists() && params.get("__create_goldens").map(String::as_str) == Some("1") {
+                    std::fs::copy(actual.as_str(), golden_path)
+                        .map_err(|e| AutomataError::Internal(format!("create golden: {e}")))?;
+                    log::info!("snapshot: created golden {golden}");
+                    return Ok(true);
+                }
                 let load = |path: &str| image::open(path).ok();
                 let (Some(img_a), Some(img_g)) = (load(actual), load(golden)) else {
                     return Ok(false);
