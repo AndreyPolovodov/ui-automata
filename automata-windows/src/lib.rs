@@ -187,6 +187,13 @@ pub fn init_logging(log_path: Option<&std::path::Path>) {
 pub fn init_com() {
     #[cfg(target_os = "windows")]
     unsafe {
+        use windows::Win32::UI::HiDpi::{
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
+        };
+        // Must be called before any window creation. Makes UIA return physical pixel
+        // coordinates and GDI capture at physical resolution — consistent on HiDPI screens.
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
         use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
     }

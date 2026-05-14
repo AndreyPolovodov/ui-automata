@@ -321,6 +321,20 @@ impl JsonSchema for Condition {
             "additionalProperties": false
         }));
 
+        // SnapshotMatches — pixel comparison of two PNG files
+        variants.push(json!({
+            "type": "object",
+            "description": "True when two PNG files are pixel-equivalent within the given tolerance. Each pixel is compared per RGB channel; a pixel matches if every channel differs by at most fuzz_pct/100*255. Returns false if either file is missing or dimensions differ. Both paths support {output.*} substitution.",
+            "required": ["type", "actual", "golden"],
+            "properties": {
+                "type": { "const": "SnapshotMatches" },
+                "actual": { "type": "string", "description": "Path to the captured image. Supports {output.*} substitution." },
+                "golden": { "type": "string", "description": "Path to the reference image. Supports {output.*} substitution." },
+                "fuzz_pct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Allowed per-channel difference as a percentage of 255. Default: 0." }
+            },
+            "additionalProperties": false
+        }));
+
         // TabWithState — evaluates a JS expression in a browser tab; true only when result == "true"
         variants.push(json!({
             "type": "object",

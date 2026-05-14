@@ -23,6 +23,7 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 chrono = { workspace = true }
 fern = { version = "0.7", features = ["colored"] }
+image = { workspace = true }
 clap = { workspace = true }
 time = { workspace = true }
 
@@ -46,4 +47,5 @@ windows = { workspace = true, features = [
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    "Win32_UI_HiDpi",
 ] }

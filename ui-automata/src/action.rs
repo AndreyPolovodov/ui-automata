@@ -245,6 +245,22 @@ pub enum Action {
     /// `{output.*}` tokens in both fields are substituted before execution.
     MoveFile { source: String, destination: String },
 
+    /// Capture a rectangular screenshot of an element or window and save it as PNG.
+    ///
+    /// If `selector` is given, the captured region is the bounding box of the first
+    /// matched element. Otherwise the entire scope window is captured.
+    /// Parent directories of `path` are created automatically.
+    /// `path` supports `{workflow.dir}`, `{output.*}`, and `{param.*}` substitution.
+    CaptureSnapshot {
+        /// Anchor name providing the search root and window coordinates.
+        scope: String,
+        /// Narrow the capture region to a specific element's bounds.
+        #[serde(default)]
+        selector: Option<SelectorPath>,
+        /// Output file path (PNG). Supports variable substitution.
+        path: String,
+    },
+
     /// Navigate the browser tab anchored to `scope` to `url`.
     /// Polls `document.readyState` until `"complete"` with a hardcoded 30s deadline
     /// (independent of the step's `timeout:`). `scope` must name a `Tab` anchor.
@@ -343,6 +359,10 @@ impl Action {
             } => {
                 format!("MoveFile({source} → {destination})")
             }
+            Action::CaptureSnapshot { scope, selector, path } => match selector {
+                Some(sel) => format!("CaptureSnapshot({scope}:{sel} → {path:?})"),
+                None => format!("CaptureSnapshot({scope} → {path:?})"),
+            },
             Action::BrowserNavigate { scope, url } => {
                 format!("BrowserNavigate({scope} → {url:?})")
             }
@@ -597,6 +617,26 @@ impl Action {
                 Ok(())
             }
 
+            Action::CaptureSnapshot { scope, selector, path } => {
+                let el = match selector {
+                    Some(sel) => find_required(dom, desktop, scope, sel)?,
+                    None => dom.get(scope, desktop)?.clone(),
+                };
+                let (x, y, w, h) = el.bounds()?;
+                let png = desktop.capture_region(x, y, w.max(0) as u32, h.max(0) as u32)?;
+                let dest = std::path::Path::new(path.as_str());
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        AutomataError::Internal(format!("CaptureSnapshot: mkdir: {e}"))
+                    })?;
+                }
+                std::fs::write(dest, &png).map_err(|e| {
+                    AutomataError::Internal(format!("CaptureSnapshot: write: {e}"))
+                })?;
+                log::info!("capture_snapshot: wrote {}×{} px to {:?}", w, h, path);
+                Ok(())
+            }
+
             Action::BrowserNavigate { scope, url } => {
                 let tab = dom
                     .tab_handle(scope)
@@ -705,6 +745,11 @@ impl Action {
             } => Action::MoveFile {
                 source: sub(source),
                 destination: sub(destination),
+            },
+            Action::CaptureSnapshot { scope, selector, path } => Action::CaptureSnapshot {
+                scope: scope.clone(),
+                selector: selector.clone(),
+                path: sub(path),
             },
             Action::BrowserNavigate { scope, url } => Action::BrowserNavigate {
                 scope: scope.clone(),

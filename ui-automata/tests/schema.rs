@@ -37,6 +37,7 @@ fn condition_schema_has_all_variants() {
         "AllOf",
         "AnyOf",
         "Not",
+        "SnapshotMatches",
     ] {
         assert!(
             json.contains(variant),

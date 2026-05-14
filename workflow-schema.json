@@ -24,10 +24,10 @@
       "default": null
     },
     "global_recovery_handlers": {
-      "description": "Recovery handlers that fire for every phase without per-phase opt-in.\nApplied after phase-local handlers in the resolution order.\nHandlers propagate into subflows — use for workflow-wide popup dismissal etc.",
+      "description": "Recovery handlers that fire for every phase without per-phase opt-in.\nApplied after phase-local handlers in the resolution order.\nHandlers propagate into subflows — use for workflow-wide popup dismissal etc.\n\nEach value is either an inline handler definition or a path to a YAML file\n(resolved relative to this workflow file), enabling reuse across workflows:\n`dismiss_warning: handlers/handler_dismiss_warning.yml`",
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/$defs/YamlRecoveryHandler"
+        "$ref": "#/$defs/YamlRecoveryHandlerDef"
       }
     },
     "launch": {
@@ -661,6 +661,36 @@
           ]
         },
         {
+          "description": "Capture a rectangular screenshot of an element or window and save it as PNG.\n\nIf `selector` is given, the captured region is the bounding box of the first\nmatched element. Otherwise the entire scope window is captured.\nParent directories of `path` are created automatically.\n`path` supports `{workflow.dir}`, `{output.*}`, and `{param.*}` substitution.",
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "Output file path (PNG). Supports variable substitution.",
+              "type": "string"
+            },
+            "scope": {
+              "description": "Anchor name providing the search root and window coordinates.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Narrow the capture region to a specific element's bounds.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "CaptureSnapshot"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "path"
+          ]
+        },
+        {
           "description": "Navigate the browser tab anchored to `scope` to `url`.\nPolls `document.readyState` until `\"complete\"` with a hardcoded 30s deadline\n(independent of the step's `timeout:`). `scope` must name a `Tab` anchor.",
           "type": "object",
           "properties": {
@@ -1217,6 +1247,35 @@
           "required": [
             "type",
             "scope"
+          ]
+        },
+        {
+          "description": "True when two PNG files are pixel-equivalent within the given tolerance. Each pixel is compared per RGB channel; a pixel matches if every channel differs by at most fuzz_pct/100*255. Returns false if either file is missing or dimensions differ. Both paths support {output.*} substitution.",
+          "type": "object",
+          "properties": {
+            "actual": {
+              "description": "Path to the captured image. Supports {output.*} substitution.",
+              "type": "string"
+            },
+            "fuzz_pct": {
+              "description": "Allowed per-channel difference as a percentage of 255. Default: 0.",
+              "type": "number",
+              "maximum": 100,
+              "minimum": 0
+            },
+            "golden": {
+              "description": "Path to the reference image. Supports {output.*} substitution.",
+              "type": "string"
+            },
+            "type": {
+              "const": "SnapshotMatches"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "actual",
+            "golden"
           ]
         },
         {
@@ -1840,6 +1899,19 @@
         "trigger",
         "actions",
         "resume"
+      ]
+    },
+    "YamlRecoveryHandlerDef": {
+      "description": "A `global_recovery_handlers` map value: either an inline handler or a subflow path.\n\nWhen the value is a string, it is treated as a path to a YAML file containing\ntrigger/actions/resume fields (same as an inline `YamlRecoveryHandler`).\nThe path is resolved relative to the workflow file, just like `subflow:` in phases.\n\n```yaml\nglobal_recovery_handlers:\n  dismiss_warning: handlers/handler_dismiss_warning.yml  # subflow-style\n  inline_handler:\n    trigger: { type: ElementFound, scope: shell, selector: \">> [name~=Error]\" }\n    actions:\n      - { type: ClickForegroundButton, name: OK }\n    resume: retry_step\n```",
+      "anyOf": [
+        {
+          "description": "Path to a YAML file containing a handler definition (trigger/actions/resume).",
+          "type": "string"
+        },
+        {
+          "description": "Inline handler definition.",
+          "$ref": "#/$defs/YamlRecoveryHandler"
+        }
       ]
     },
     "YamlSubflowPhase": {

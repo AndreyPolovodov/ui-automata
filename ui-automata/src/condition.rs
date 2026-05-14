@@ -270,6 +270,20 @@ pub enum Condition {
         expr: String,
     },
 
+    /// True when two PNG files are pixel-equivalent within the given tolerance.
+    ///
+    /// The comparison is per-channel: a pixel matches if every RGB channel differs
+    /// by at most `fuzz_pct / 100 * 255`. Alpha is ignored.
+    /// Returns false if either file is missing or dimensions differ.
+    /// Both paths support `{output.*}` substitution via `apply_output`.
+    SnapshotMatches {
+        actual: String,
+        golden: String,
+        /// Allowed per-channel difference as a percentage of 255. Default: 0.
+        #[serde(default)]
+        fuzz_pct: f64,
+    },
+
     AllOf {
         conditions: Vec<Condition>,
     },
@@ -441,6 +455,12 @@ impl TryFrom<serde_yaml::Value> for Condition {
                 scope: req_str("scope")?,
                 expr: req_str("expr")?,
             }),
+            "SnapshotMatches" => {
+                let actual = req_str("actual")?;
+                let golden = req_str("golden")?;
+                let fuzz_pct = map.get("fuzz_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                Ok(Condition::SnapshotMatches { actual, golden, fuzz_pct })
+            }
             "Always" => Ok(Condition::Always),
             "ExecSucceeded" => Ok(Condition::ExecSucceeded),
             "EvalCondition" => {
@@ -503,6 +523,13 @@ impl Condition {
                     .map(|c| c.apply_output(locals, output))
                     .collect(),
             },
+            Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
+                Condition::SnapshotMatches {
+                    actual: sub(actual),
+                    golden: sub(golden),
+                    fuzz_pct: *fuzz_pct,
+                }
+            }
             Condition::FileExists { path } => Condition::FileExists { path: sub(path) },
             Condition::Not { condition } => Condition::Not {
                 condition: Box::new(condition.apply_output(locals, output)),
@@ -595,6 +622,9 @@ impl Condition {
             Condition::ForegroundIsDialog { .. } => "ForegroundIsDialog".to_string(),
             Condition::Always => "Always".to_string(),
             Condition::ExecSucceeded => "ExecSucceeded".to_string(),
+            Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
+                format!("SnapshotMatches({actual} vs {golden} fuzz={fuzz_pct}%)")
+            }
             Condition::AllOf { conditions } => format!(
                 "AllOf({})",
                 conditions
@@ -786,6 +816,21 @@ impl Condition {
                     }
                 }
                 Ok(false)
+            }
+            Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
+                let load = |path: &str| image::open(path).ok();
+                let (Some(img_a), Some(img_g)) = (load(actual), load(golden)) else {
+                    return Ok(false);
+                };
+                let a = img_a.to_rgba8();
+                let g = img_g.to_rgba8();
+                if a.dimensions() != g.dimensions() {
+                    return Ok(false);
+                }
+                let threshold = (255.0 * fuzz_pct / 100.0) as i32;
+                Ok(a.pixels().zip(g.pixels()).all(|(pa, pg)| {
+                    (0..3).all(|i| (pa[i] as i32 - pg[i] as i32).abs() <= threshold)
+                }))
             }
             Condition::Always => Ok(true),
             Condition::ExecSucceeded => {

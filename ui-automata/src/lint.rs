@@ -768,6 +768,7 @@ const ALL_ACTION_TYPES: &[&str] = &[
     "MoveFile",
     "BrowserNavigate",
     "BrowserEval",
+    "CaptureSnapshot",
 ];
 
 fn lint_action(
@@ -939,6 +940,18 @@ fn lint_action(
             }
             // key is optional — omit to discard the result
         }
+        "CaptureSnapshot" => {
+            if let Some((scope, span)) = require_str(v, "scope", path, diags) {
+                check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
+            }
+            if let Some((s, span)) = require_str(v, "path", path, diags) {
+                check_interpolation(s, &span, &format!("{path}.path"), params, diags);
+            }
+            // selector is optional
+            if get(v, "selector").is_some() {
+                check_selector(v, "selector", path, diags);
+            }
+        }
         _ => {}
     }
 }
@@ -969,6 +982,7 @@ const ALL_CONDITION_TYPES: &[&str] = &[
     "ExecSucceeded",
     "TabWithAttribute",
     "TabWithState",
+    "SnapshotMatches",
 ];
 
 fn lint_condition(
@@ -1115,6 +1129,10 @@ fn lint_condition(
                 check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             require_str(v, "expr", path, diags);
+        }
+        "SnapshotMatches" => {
+            require_str(v, "actual", path, diags);
+            require_str(v, "golden", path, diags);
         }
         "Always" => {}
         "EvalCondition" => {

@@ -443,6 +443,92 @@ impl ui_automata::Desktop for Desktop {
         result
     }
 
+    fn capture_region(
+        &self,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+    ) -> Result<Vec<u8>, ui_automata::AutomataError> {
+        if w == 0 || h == 0 {
+            return Err(ui_automata::AutomataError::Platform(
+                "capture_region: zero-size region".into(),
+            ));
+        }
+        use windows::Win32::Graphics::Gdi::{
+            BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap,
+            CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits,
+            HGDIOBJ, ReleaseDC, SRCCOPY, SelectObject,
+        };
+        unsafe {
+            let screen_dc = GetDC(None);
+            if screen_dc.is_invalid() {
+                return Err(ui_automata::AutomataError::Platform("GetDC failed".into()));
+            }
+            let mem_dc = CreateCompatibleDC(Some(screen_dc));
+            let bitmap = CreateCompatibleBitmap(screen_dc, w as i32, h as i32);
+            let old_obj = SelectObject(mem_dc, HGDIOBJ(bitmap.0 as _));
+
+            let blit_ok = BitBlt(mem_dc, 0, 0, w as i32, h as i32, Some(screen_dc), x, y, SRCCOPY);
+
+            if blit_ok.is_err() {
+                SelectObject(mem_dc, old_obj);
+                let _ = DeleteObject(HGDIOBJ(bitmap.0 as _));
+                let _ = DeleteDC(mem_dc);
+                let _ = ReleaseDC(None, screen_dc);
+                return Err(ui_automata::AutomataError::Platform("BitBlt failed".into()));
+            }
+
+            let mut bmi = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: w as i32,
+                    biHeight: -(h as i32), // negative = top-down row order
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut pixels = vec![0u8; (w * h * 4) as usize];
+            GetDIBits(
+                mem_dc,
+                bitmap,
+                0,
+                h,
+                Some(pixels.as_mut_ptr().cast()),
+                &mut bmi,
+                DIB_RGB_COLORS,
+            );
+
+            SelectObject(mem_dc, old_obj);
+            let _ = DeleteObject(HGDIOBJ(bitmap.0 as _));
+            let _ = DeleteDC(mem_dc);
+            let _ = ReleaseDC(None, screen_dc);
+
+            // GDI returns pixels as BGRA; swap B↔R and force alpha=255.
+            for chunk in pixels.chunks_mut(4) {
+                chunk.swap(0, 2);
+                chunk[3] = 255;
+            }
+
+            let img = image::RgbaImage::from_raw(w, h, pixels).ok_or_else(|| {
+                ui_automata::AutomataError::Platform("capture_region: buffer size mismatch".into())
+            })?;
+            let mut buf = Vec::new();
+            image::DynamicImage::ImageRgba8(img)
+                .write_to(
+                    &mut std::io::Cursor::new(&mut buf),
+                    image::ImageFormat::Png,
+                )
+                .map_err(|e| {
+                    ui_automata::AutomataError::Platform(format!("PNG encode: {e}"))
+                })?;
+            Ok(buf)
+        }
+    }
+
     fn tooltip_windows(&self) -> Vec<UIElement> {
         use uiautomation::UIAutomation;
         use uiautomation::controls::ControlType;

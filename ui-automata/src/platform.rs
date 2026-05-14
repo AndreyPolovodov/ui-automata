@@ -215,4 +215,16 @@ pub trait Desktop: Send + 'static {
     fn hwnd_z_order(&self) -> Vec<u64> {
         vec![]
     }
+
+    /// Capture a rectangular region of the screen and return PNG-encoded bytes.
+    ///
+    /// `x`, `y` are screen-space coordinates of the top-left corner.
+    /// `w`, `h` are pixel dimensions.
+    /// Returns `Err` on non-Windows platforms or if the capture fails.
+    fn capture_region(&self, x: i32, y: i32, w: u32, h: u32) -> Result<Vec<u8>, AutomataError> {
+        let _ = (x, y, w, h);
+        Err(AutomataError::Platform(
+            "capture_region: not supported on this platform".into(),
+        ))
+    }
 }
