@@ -602,6 +602,7 @@ impl WorkflowFile {
 
         // Reject unknown CLI params.
         for key in params.keys() {
+            if key.starts_with("__") { continue; }
             if !param_defs.iter().any(|p| p.name == *key) {
                 return Err(format!("unknown parameter '--{}'", key.replace('_', "-")));
             }
@@ -619,6 +620,12 @@ impl WorkflowFile {
                     "required parameter '--{}' not provided",
                     def.name.replace('_', "-")
                 ));
+            }
+        }
+        // Pass through internal keys (__ prefix) so the engine can use them.
+        for (key, val) in params {
+            if key.starts_with("__") {
+                merged.insert(key.clone(), val.clone());
             }
         }
 

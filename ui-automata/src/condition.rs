@@ -820,6 +820,10 @@ impl Condition {
             Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
                 let golden_path = std::path::Path::new(golden.as_str());
                 if !golden_path.exists() && params.get("__create_goldens").map(String::as_str) == Some("1") {
+                    if let Some(parent) = golden_path.parent() {
+                        std::fs::create_dir_all(parent)
+                            .map_err(|e| AutomataError::Internal(format!("create golden dir: {e}")))?;
+                    }
                     std::fs::copy(actual.as_str(), golden_path)
                         .map_err(|e| AutomataError::Internal(format!("create golden: {e}")))?;
                     log::info!("snapshot: created golden {golden}");
