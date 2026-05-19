@@ -117,8 +117,9 @@ enum Attr {
     Name,
     Title, // alias for name on Window elements
     AutomationId,
-    Help, // UIA HelpText (tooltip text)
-    Url,  // Tab anchor matching only — ignored on UIA elements
+    Class, // UIA ClassName property
+    Help,  // UIA HelpText (tooltip text)
+    Url,   // Tab anchor matching only — ignored on UIA elements
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,8 +218,8 @@ impl SelectorPath {
             let actual = match p.attr {
                 Attr::Name | Attr::Title => title,
                 Attr::Url => url,
-                // Ignore role / automation_id / help for tab matching.
-                Attr::Role | Attr::AutomationId | Attr::Help => return true,
+                // Ignore role / automation_id / class / help for tab matching.
+                Attr::Role | Attr::AutomationId | Attr::Class | Attr::Help => return true,
             };
             p.values.iter().any(|v| match p.op {
                 Op::Exact => actual == v.as_str(),
@@ -549,6 +550,7 @@ fn predicate_matches<E: Element>(pred: &Predicate, element: &E) -> bool {
         Attr::Role => element.role(),
         Attr::Name | Attr::Title => element.name().unwrap_or_default(),
         Attr::AutomationId => element.automation_id().unwrap_or_default(),
+        Attr::Class => element.class_name().unwrap_or_default(),
         Attr::Help => element.help_text().unwrap_or_default(),
         // Url is only meaningful for Tab anchor matching; always returns empty on UIA elements.
         Attr::Url => String::new(),
@@ -769,6 +771,7 @@ fn parse_predicate(inner: &str) -> Result<Predicate, AutomataError> {
         "name" => Attr::Name,
         "title" => Attr::Title,
         "id" | "automation_id" => Attr::AutomationId,
+        "class" => Attr::Class,
         "help" => Attr::Help,
         "url" => Attr::Url,
         other => {
@@ -814,6 +817,7 @@ impl std::fmt::Display for SelectorPath {
                     Attr::Role => "role",
                     Attr::Name | Attr::Title => "name",
                     Attr::AutomationId => "id",
+                    Attr::Class => "class",
                     Attr::Help => "help",
                     Attr::Url => "url",
                 };

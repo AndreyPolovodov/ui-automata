@@ -445,6 +445,43 @@ fn or_finds_multiple_via_find_all() {
     assert_eq!(results.len(), 2);
 }
 
+// ── class_name / class= ──────────────────────────────────────────────────────
+
+#[test]
+fn parse_class_predicate() {
+    assert!(SelectorPath::parse("[class=WorkplaceView]").is_ok());
+}
+
+#[test]
+fn class_exact_matches() {
+    let el = MockElement::leaf("pane", "").with_class_name("WorkplaceView");
+    assert!(sel("[class=WorkplaceView]").matches(&el));
+    assert!(!sel("[class=OtherView]").matches(&el));
+}
+
+#[test]
+fn class_contains_matches() {
+    let el = MockElement::leaf("pane", "").with_class_name("WorkplaceView");
+    assert!(sel("[class~=Workplace]").matches(&el));
+    assert!(!sel("[class~=Toolbar]").matches(&el));
+}
+
+#[test]
+fn class_missing_does_not_match() {
+    let el = MockElement::leaf("pane", "WorkplaceView");
+    assert!(!sel("[class=WorkplaceView]").matches(&el));
+}
+
+#[test]
+fn class_combined_with_role() {
+    let target = MockElement::leaf("pane", "").with_class_name("WorkplaceView");
+    let other = MockElement::leaf("pane", "").with_class_name("ToolbarView");
+    let root = MockElement::parent("window", "App", vec![target, other]);
+    let results = sel("window > [role=pane][class=WorkplaceView]").find_all(&root);
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].class_name(), Some("WorkplaceView".into()));
+}
+
 // ── automation_id / id= ───────────────────────────────────────────────────────
 
 #[test]

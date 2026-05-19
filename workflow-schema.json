@@ -338,6 +338,23 @@
           ]
         },
         {
+          "description": "Maximize the window for `scope` via WindowPattern.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "MaximizeWindow"
+            }
+          },
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
           "description": "Close the window for `scope` via its close button (sends WM_CLOSE).",
           "type": "object",
           "properties": {

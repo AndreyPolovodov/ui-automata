@@ -19,6 +19,7 @@ struct MockElementInner {
     /// Overrides `name` for the `text()` call. If `None`, `text()` falls back to `name`.
     pub text: Option<String>,
     pub automation_id: Option<String>,
+    pub class_name: Option<String>,
     pub alive: Mutex<bool>,
     pub children: Mutex<Vec<MockElement>>,
     pub parent: Mutex<Option<std::sync::Weak<MockElementInner>>>,
@@ -33,6 +34,7 @@ impl MockElement {
                 name: Some(name.into()),
                 text: None,
                 automation_id: None,
+                class_name: None,
                 alive: Mutex::new(true),
                 children: Mutex::new(vec![]),
                 parent: Mutex::new(None),
@@ -53,6 +55,7 @@ impl MockElement {
                 name: Some(name.into()),
                 text: Some(text.into()),
                 automation_id: None,
+                class_name: None,
                 alive: Mutex::new(true),
                 children: Mutex::new(vec![]),
                 parent: Mutex::new(None),
@@ -71,6 +74,7 @@ impl MockElement {
             name: Some(name.into()),
             text: None,
             automation_id: None,
+            class_name: None,
             alive: Mutex::new(true),
             children: Mutex::new(vec![]),
             parent: Mutex::new(None),
@@ -82,7 +86,6 @@ impl MockElement {
 
     /// Set the automation_id on this element (builder-style).
     pub fn with_automation_id(self, id: impl Into<String>) -> Self {
-        // Arc::make_mut would require Clone on inner; instead wrap via a new inner.
         let inner = &*self.inner;
         Self {
             inner: Arc::new(MockElementInner {
@@ -90,6 +93,24 @@ impl MockElement {
                 name: inner.name.clone(),
                 text: inner.text.clone(),
                 automation_id: Some(id.into()),
+                class_name: inner.class_name.clone(),
+                alive: Mutex::new(*inner.alive.lock().unwrap()),
+                children: Mutex::new(inner.children.lock().unwrap().clone()),
+                parent: Mutex::new(None),
+            }),
+        }
+    }
+
+    /// Set the class_name on this element (builder-style).
+    pub fn with_class_name(self, cls: impl Into<String>) -> Self {
+        let inner = &*self.inner;
+        Self {
+            inner: Arc::new(MockElementInner {
+                role: inner.role.clone(),
+                name: inner.name.clone(),
+                text: inner.text.clone(),
+                automation_id: inner.automation_id.clone(),
+                class_name: Some(cls.into()),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
@@ -143,6 +164,10 @@ impl Element for MockElement {
 
     fn automation_id(&self) -> Option<String> {
         self.inner.automation_id.clone()
+    }
+
+    fn class_name(&self) -> Option<String> {
+        self.inner.class_name.clone()
     }
 
     fn text(&self) -> Result<String, AutomataError> {
@@ -242,6 +267,10 @@ impl Element for MockElement {
         self.check_alive()
     }
 
+    fn maximize_window(&self) -> Result<(), AutomataError> {
+        self.check_alive()
+    }
+
     fn close(&self) -> Result<(), AutomataError> {
         self.check_alive()
     }
@@ -284,6 +313,10 @@ pub fn mock_desktop_from_yaml(yaml: &str) -> MockDesktop {
         name: Option<String>,
         #[serde(default)]
         text: Option<String>,
+        #[serde(rename = "id", default)]
+        automation_id: Option<String>,
+        #[serde(default)]
+        class_name: Option<String>,
         #[serde(default)]
         children: Vec<YamlNode>,
         // layout fields — accepted but ignored
@@ -303,7 +336,8 @@ pub fn mock_desktop_from_yaml(yaml: &str) -> MockDesktop {
             role: n.role,
             name: n.name,
             text: n.text,
-            automation_id: None,
+            automation_id: n.automation_id,
+            class_name: n.class_name,
             alive: Mutex::new(true),
             children: Mutex::new(vec![]),
             parent: Mutex::new(None),

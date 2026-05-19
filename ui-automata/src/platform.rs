@@ -81,6 +81,11 @@ pub trait Element: Clone + 'static {
         None
     }
 
+    /// UIA ClassName property. `None` if empty or unavailable.
+    fn class_name(&self) -> Option<String> {
+        None
+    }
+
     /// UIA HelpText property (tooltip text). `None` if empty or unavailable.
     fn help_text(&self) -> Option<String> {
         None
@@ -176,6 +181,7 @@ pub trait Element: Clone + 'static {
 
     fn activate_window(&self) -> Result<(), AutomataError>;
     fn minimize_window(&self) -> Result<(), AutomataError>;
+    fn maximize_window(&self) -> Result<(), AutomataError>;
     fn close(&self) -> Result<(), AutomataError>;
 }
 

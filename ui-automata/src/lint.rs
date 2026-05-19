@@ -737,6 +737,7 @@ const ACTIONS_SCOPE_SELECTOR: &[&str] = &[
 const ACTIONS_SCOPE_ONLY: &[&str] = &[
     "ActivateWindow",
     "MinimizeWindow",
+    "MaximizeWindow",
     "CloseWindow",
     "DismissDialog",
 ];
@@ -755,6 +756,7 @@ const ALL_ACTION_TYPES: &[&str] = &[
     "ExpandCollapse",
     "ActivateWindow",
     "MinimizeWindow",
+    "MaximizeWindow",
     "CloseWindow",
     "DismissDialog",
     "ClickForegroundButton",

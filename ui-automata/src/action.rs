@@ -117,6 +117,8 @@ pub enum Action {
     ActivateWindow { scope: String },
     /// Minimize the window for `scope`.
     MinimizeWindow { scope: String },
+    /// Maximize the window for `scope` via WindowPattern.
+    MaximizeWindow { scope: String },
     /// Close the window for `scope` via its close button (sends WM_CLOSE).
     CloseWindow { scope: String },
 
@@ -315,6 +317,7 @@ impl Action {
             Action::Invoke { scope, selector } => format!("Invoke({scope}:{selector})"),
             Action::ActivateWindow { scope } => format!("ActivateWindow({scope})"),
             Action::MinimizeWindow { scope } => format!("MinimizeWindow({scope})"),
+            Action::MaximizeWindow { scope } => format!("MaximizeWindow({scope})"),
             Action::CloseWindow { scope } => format!("CloseWindow({scope})"),
             Action::SetValue {
                 scope,
@@ -429,6 +432,8 @@ impl Action {
             Action::ActivateWindow { scope } => dom.get(scope, desktop)?.clone().activate_window(),
 
             Action::MinimizeWindow { scope } => dom.get(scope, desktop)?.clone().minimize_window(),
+
+            Action::MaximizeWindow { scope } => dom.get(scope, desktop)?.clone().maximize_window(),
 
             Action::CloseWindow { scope } => dom.get(scope, desktop)?.clone().close(),
 

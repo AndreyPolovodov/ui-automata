@@ -492,6 +492,27 @@ impl ui_automata::Element for UIElement {
             .map_err(Into::into)
     }
 
+    fn maximize_window(&self) -> Result<(), ui_automata::AutomataError> {
+        let handle = self
+            .inner
+            .get_native_window_handle()
+            .map_err(map_err)
+            .map_err(Into::<ui_automata::AutomataError>::into)?;
+        let hwnd: windows::Win32::Foundation::HWND = handle.into();
+        unsafe {
+            // Restore first to clear any snap/maximized state, then maximize cleanly.
+            let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                hwnd,
+                windows::Win32::UI::WindowsAndMessaging::SW_RESTORE,
+            );
+            let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                hwnd,
+                windows::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE,
+            );
+        }
+        Ok(())
+    }
+
     fn close(&self) -> Result<(), ui_automata::AutomataError> {
         self.inner
             .get_pattern::<UIWindowPattern>()
@@ -557,6 +578,13 @@ impl ui_automata::Element for UIElement {
             .get_automation_id()
             .ok()
             .filter(|s| !s.is_empty())
+    }
+
+    fn class_name(&self) -> Option<String> {
+        self.inner
+            .get_classname()
+            .ok()
+            .filter(|s: &String| !s.is_empty())
     }
 
     fn help_text(&self) -> Option<String> {

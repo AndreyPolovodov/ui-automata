@@ -124,6 +124,9 @@ fn print_node(node: &automata_windows::ElementNode, indent: usize, remaining_dep
     if let Some(id) = &node.automation_id {
         out.push_str(&format!("[id={id}]"));
     }
+    if let Some(cls) = &node.class_name {
+        out.push_str(&format!("[class={cls}]"));
+    }
     let value = node.text.as_deref().unwrap_or("");
     if !value.is_empty() {
         out.push_str(&format!(" value={value:?}"));
@@ -209,6 +212,9 @@ fn run_interactive(hwnd: u64) {
             }
             if let Some(id) = &m.automation_id {
                 out.push_str(&format!("[id={id}]"));
+            }
+            if let Some(cls) = &m.class_name {
+                out.push_str(&format!("[class={cls}]"));
             }
             let value = m.text.as_deref().unwrap_or("");
             if !value.is_empty() {

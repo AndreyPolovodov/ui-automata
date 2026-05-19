@@ -16,6 +16,8 @@ pub struct ElementNode {
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
     pub automation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// Toggle state for checkboxes and toggle buttons: `true` = checked/on, `false` = unchecked/off.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,6 +47,9 @@ impl ui_automata::Element for ElementNode {
     }
     fn automation_id(&self) -> Option<String> {
         self.automation_id.clone()
+    }
+    fn class_name(&self) -> Option<String> {
+        self.class_name.clone()
     }
     fn bounds(&self) -> R<(i32, i32, i32, i32)> {
         Ok((self.x, self.y, self.width, self.height))
@@ -104,6 +109,9 @@ impl ui_automata::Element for ElementNode {
         unimplemented!("snapshot")
     }
     fn minimize_window(&self) -> R<()> {
+        unimplemented!("snapshot")
+    }
+    fn maximize_window(&self) -> R<()> {
         unimplemented!("snapshot")
     }
     fn close(&self) -> R<()> {
@@ -491,11 +499,13 @@ fn walk_element(
     };
 
     let automation_id = element.get_automation_id().ok().filter(|s| !s.is_empty());
+    let class_name = element.get_classname().ok().filter(|s: &String| !s.is_empty());
 
     Ok(ElementNode {
         role,
         name,
         automation_id,
+        class_name,
         text,
         toggle_state,
         x,
