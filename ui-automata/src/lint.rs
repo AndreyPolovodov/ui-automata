@@ -192,6 +192,9 @@ fn check_anchor_ref(
     field: &str,
     diags: &mut Vec<LintDiag>,
 ) {
+    if scope == "_desktop" {
+        return;
+    }
     if !anchors.contains(scope) {
         let mut known: Vec<&str> = anchors.iter().map(|s| s.as_str()).collect();
         known.sort();
@@ -219,6 +222,9 @@ fn check_scope_ref(
     field: &str,
     diags: &mut Vec<LintDiag>,
 ) {
+    if scope == "_desktop" {
+        return;
+    }
     if !anchors.contains(scope) {
         check_anchor_ref(scope, span, anchors, path, field, diags);
     } else if !mounted.contains(scope) {

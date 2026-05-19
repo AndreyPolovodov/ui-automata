@@ -820,6 +820,16 @@ fn find_required<D: Desktop>(
     scope: &str,
     selector: &SelectorPath,
 ) -> Result<D::Elem, AutomataError> {
+    if scope == "_desktop" {
+        for window in desktop.application_windows().unwrap_or_default() {
+            if let Some(el) = selector.find_one(&window) {
+                return Ok(el);
+            }
+        }
+        return Err(AutomataError::Internal(format!(
+            "element not found: selector '{selector}' across all desktop windows"
+        )));
+    }
     match dom.find_descendant(scope, selector, desktop)? {
         Some(el) => Ok(el),
         None => {

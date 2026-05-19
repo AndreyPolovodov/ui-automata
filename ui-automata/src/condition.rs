@@ -932,6 +932,14 @@ fn find_in_scope<D: Desktop>(
     scope: &str,
     selector: &SelectorPath,
 ) -> Result<Option<D::Elem>, AutomataError> {
+    if scope == "_desktop" {
+        for window in desktop.application_windows().unwrap_or_default() {
+            if let Some(el) = selector.find_one(&window) {
+                return Ok(Some(el));
+            }
+        }
+        return Ok(None);
+    }
     dom.find_descendant(scope, selector, desktop)
 }
 
