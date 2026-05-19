@@ -20,6 +20,10 @@ struct MockElementInner {
     pub text: Option<String>,
     pub automation_id: Option<String>,
     pub class_name: Option<String>,
+    /// SelectionItemPattern state. `None` means pattern not supported.
+    pub is_selected: Option<bool>,
+    /// SelectionPattern selected item name. `None` means pattern not supported.
+    pub selection_text: Option<String>,
     pub alive: Mutex<bool>,
     pub children: Mutex<Vec<MockElement>>,
     pub parent: Mutex<Option<std::sync::Weak<MockElementInner>>>,
@@ -35,6 +39,8 @@ impl MockElement {
                 text: None,
                 automation_id: None,
                 class_name: None,
+                is_selected: None,
+                selection_text: None,
                 alive: Mutex::new(true),
                 children: Mutex::new(vec![]),
                 parent: Mutex::new(None),
@@ -56,6 +62,8 @@ impl MockElement {
                 text: Some(text.into()),
                 automation_id: None,
                 class_name: None,
+                is_selected: None,
+                selection_text: None,
                 alive: Mutex::new(true),
                 children: Mutex::new(vec![]),
                 parent: Mutex::new(None),
@@ -75,6 +83,8 @@ impl MockElement {
             text: None,
             automation_id: None,
             class_name: None,
+            is_selected: None,
+            selection_text: None,
             alive: Mutex::new(true),
             children: Mutex::new(vec![]),
             parent: Mutex::new(None),
@@ -82,6 +92,44 @@ impl MockElement {
         let this = Self { inner };
         this.set_children(children);
         this
+    }
+
+    /// Set the SelectionItemPattern state (builder-style). `true` = selected.
+    pub fn with_is_selected(self, selected: bool) -> Self {
+        let inner = &*self.inner;
+        Self {
+            inner: Arc::new(MockElementInner {
+                role: inner.role.clone(),
+                name: inner.name.clone(),
+                text: inner.text.clone(),
+                automation_id: inner.automation_id.clone(),
+                class_name: inner.class_name.clone(),
+                is_selected: Some(selected),
+                selection_text: inner.selection_text.clone(),
+                alive: Mutex::new(*inner.alive.lock().unwrap()),
+                children: Mutex::new(inner.children.lock().unwrap().clone()),
+                parent: Mutex::new(None),
+            }),
+        }
+    }
+
+    /// Set the SelectionPattern selected item name (builder-style).
+    pub fn with_selection_text(self, text: impl Into<String>) -> Self {
+        let inner = &*self.inner;
+        Self {
+            inner: Arc::new(MockElementInner {
+                role: inner.role.clone(),
+                name: inner.name.clone(),
+                text: inner.text.clone(),
+                automation_id: inner.automation_id.clone(),
+                class_name: inner.class_name.clone(),
+                is_selected: inner.is_selected,
+                selection_text: Some(text.into()),
+                alive: Mutex::new(*inner.alive.lock().unwrap()),
+                children: Mutex::new(inner.children.lock().unwrap().clone()),
+                parent: Mutex::new(None),
+            }),
+        }
     }
 
     /// Set the automation_id on this element (builder-style).
@@ -94,6 +142,8 @@ impl MockElement {
                 text: inner.text.clone(),
                 automation_id: Some(id.into()),
                 class_name: inner.class_name.clone(),
+                is_selected: inner.is_selected,
+                selection_text: inner.selection_text.clone(),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
@@ -111,6 +161,8 @@ impl MockElement {
                 text: inner.text.clone(),
                 automation_id: inner.automation_id.clone(),
                 class_name: Some(cls.into()),
+                is_selected: inner.is_selected,
+                selection_text: inner.selection_text.clone(),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
@@ -247,6 +299,14 @@ impl Element for MockElement {
         self.check_alive()
     }
 
+    fn is_selected(&self) -> Result<Option<bool>, AutomataError> {
+        Ok(self.inner.is_selected)
+    }
+
+    fn selection_text(&self) -> Result<Option<String>, AutomataError> {
+        Ok(self.inner.selection_text.clone())
+    }
+
     fn focus(&self) -> Result<(), AutomataError> {
         self.check_alive()
     }
@@ -318,6 +378,10 @@ pub fn mock_desktop_from_yaml(yaml: &str) -> MockDesktop {
         #[serde(default)]
         class_name: Option<String>,
         #[serde(default)]
+        is_selected: Option<bool>,
+        #[serde(default)]
+        selection_text: Option<String>,
+        #[serde(default)]
         children: Vec<YamlNode>,
         // layout fields — accepted but ignored
         #[serde(default)]
@@ -338,6 +402,8 @@ pub fn mock_desktop_from_yaml(yaml: &str) -> MockDesktop {
             text: n.text,
             automation_id: n.automation_id,
             class_name: n.class_name,
+            is_selected: n.is_selected,
+            selection_text: n.selection_text,
             alive: Mutex::new(true),
             children: Mutex::new(vec![]),
             parent: Mutex::new(None),

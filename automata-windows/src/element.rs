@@ -7,8 +7,8 @@ use super::{
 use uiautomation::UIAutomation;
 use uiautomation::inputs::{Keyboard, Mouse};
 use uiautomation::patterns::{
-    UIExpandCollapsePattern, UIInvokePattern, UISelectionItemPattern, UITogglePattern,
-    UIValuePattern, UIWindowPattern,
+    UIExpandCollapsePattern, UIInvokePattern, UIItemContainerPattern, UISelectionItemPattern,
+    UISelectionPattern, UITogglePattern, UIValuePattern, UIWindowPattern,
 };
 use uiautomation::types::{Point, ToggleState, TreeScope, WindowVisualState};
 
@@ -553,6 +553,52 @@ impl ui_automata::Element for UIElement {
             )))?
             .toggle()
             .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))
+    }
+
+    fn selection_text(&self) -> Result<Option<String>, ui_automata::AutomataError> {
+        let Ok(sp) = self.inner.get_pattern::<UISelectionPattern>() else {
+            return Ok(None);
+        };
+        let items = sp.get_selection().map_err(map_err)?;
+        Ok(items.into_iter().next().and_then(|el| {
+            el.get_name().ok().filter(|s| !s.is_empty())
+        }))
+    }
+
+    fn select_item(&self, value: &str) -> Result<(), ui_automata::AutomataError> {
+        // Try ItemContainerPattern first — finds items without expanding
+        if let Ok(icp) = self.inner.get_pattern::<UIItemContainerPattern>() {
+            use uiautomation::types::UIProperty;
+            use uiautomation::variants::Variant;
+            if let Ok(item) = icp.find_item_by_property(self.inner.clone(), UIProperty::Name, Variant::from(value)) {
+                if let Ok(sip) = item.get_pattern::<UISelectionItemPattern>() {
+                    return sip.select().map_err(map_err).map_err(Into::into);
+                }
+            }
+        }
+        // Fallback: expand → find descendant by name → select → collapse
+        let pat = self.inner.get_pattern::<UIExpandCollapsePattern>()
+            .map_err(|_| ui_automata::AutomataError::Internal(format!(
+                "select_item: element '{}' supports neither ItemContainerPattern nor ExpandCollapsePattern",
+                self.inner.get_name().unwrap_or_default()
+            )))?;
+        pat.expand().map_err(map_err)?;
+        let auto = UIAutomation::new_direct().map_err(map_err)?;
+        let true_cond = auto.create_true_condition().map_err(map_err)?;
+        let descendants = self.inner.find_all(TreeScope::Descendants, &true_cond).map_err(map_err)?;
+        let item = descendants.into_iter()
+            .find(|el| el.get_name().unwrap_or_default() == value)
+            .ok_or_else(|| ui_automata::AutomataError::Internal(format!(
+                "select_item: item '{value}' not found in '{}'",
+                self.inner.get_name().unwrap_or_default()
+            )))?;
+        let result = item.get_pattern::<UISelectionItemPattern>()
+            .map_err(|_| ui_automata::AutomataError::Internal(format!(
+                "select_item: item '{value}' does not support SelectionItemPattern"
+            )))
+            .and_then(|sip| sip.select().map_err(map_err).map_err(Into::into));
+        let _ = pat.collapse();
+        result
     }
 
     fn expand_collapse(&self, expand: bool) -> Result<(), ui_automata::AutomataError> {

@@ -200,16 +200,30 @@ impl JsonSchema for Condition {
             "additionalProperties": false
         }));
 
-        // ElementSelected — SelectionItemPattern state check (RadioButton, ListItem, TabItem)
+        // ItemSelected — SelectionItemPattern state check (RadioButton, ListItem, TabItem)
         variants.push(json!({
             "type": "object",
             "description": "True when the matched element's selection state matches `state`. Uses SelectionItemPattern — works for RadioButton, ListItem, TabItem, etc. `state: true` = selected, `state: false` = not selected. Omit `state` to verify SelectionItemPattern is supported without checking the value.",
             "required": ["type", "scope", "selector"],
             "properties": {
-                "type": { "const": "ElementSelected" },
+                "type": { "const": "ItemSelected" },
                 "scope": scope_s(),
                 "selector": selector_s(),
                 "state": { "type": "boolean", "description": "Expected selection state: true = selected, false = not selected." }
+            },
+            "additionalProperties": false
+        }));
+
+        // Selected — ISelectionProvider.GetSelection() check (ComboBox, ListBox, TabControl)
+        variants.push(json!({
+            "type": "object",
+            "description": "True when the container element's current selection (via ISelectionProvider.GetSelection()) matches `pattern`. Works on ComboBox, ListBox, TabControl etc. without expanding.",
+            "required": ["type", "scope", "selector", "pattern"],
+            "properties": {
+                "type": { "const": "Selected" },
+                "scope": scope_s(),
+                "selector": selector_s(),
+                "pattern": text_match
             },
             "additionalProperties": false
         }));

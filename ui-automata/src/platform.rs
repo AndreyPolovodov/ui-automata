@@ -158,6 +158,24 @@ pub trait Element: Clone + 'static {
         Ok(None)
     }
 
+    /// Get the name of the currently selected item via `ISelectionProvider.GetSelection()`.
+    /// Returns `Some(name)` if the element implements `SelectionPattern` and has a selection,
+    /// `None` if the pattern is not supported or selection is empty.
+    fn selection_text(&self) -> Result<Option<String>, AutomataError> {
+        Ok(None)
+    }
+
+    /// Select the item with the given display name inside this container.
+    /// Uses `IItemContainerPattern.FindItemByProperty()` when available (no expand needed),
+    /// falling back to expand + find child by name + `SelectionItemPattern.Select()` + collapse.
+    /// Returns `Err` if the item is not found or selection fails.
+    fn select_item(&self, value: &str) -> Result<(), AutomataError> {
+        let _ = value;
+        Err(AutomataError::Platform(
+            "select_item: not supported on this platform".into(),
+        ))
+    }
+
     /// Toggle this element via `ITogglePattern::Toggle()`.
     /// Returns `Err` if `TogglePattern` is not supported.
     /// Prefer `SetToggle` action for idempotent state setting.

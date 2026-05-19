@@ -140,6 +140,16 @@ pub enum Action {
         state: bool,
     },
 
+    /// Select an item by display name inside a container (ComboBox, ListBox, etc.).
+    /// Uses `IItemContainerPattern.FindItemByProperty()` when available (no expand needed),
+    /// falling back to expand + find child + `SelectionItemPattern.Select()` + collapse.
+    Select {
+        scope: String,
+        selector: SelectorPath,
+        /// Display name of the item to select (exact match).
+        value: String,
+    },
+
     /// Expand or collapse an element via `IExpandCollapsePattern`.
     /// Use `state: expand` to open a combo-box or tree node, `state: collapse` to close it.
     /// Returns an error if the element does not support `ExpandCollapsePattern`.
@@ -329,6 +339,9 @@ impl Action {
             Action::SetToggle { scope, selector, state } => {
                 format!("SetToggle({scope}:{selector} → {})", if *state { "on" } else { "off" })
             }
+            Action::Select { scope, selector, value } => {
+                format!("Select({scope}:{selector} → {value:?})")
+            }
             Action::ExpandCollapse { scope, selector, state } => {
                 format!("ExpandCollapse({scope}:{selector} → {:?})", state)
             }
@@ -455,6 +468,9 @@ impl Action {
                 }
             }
 
+            Action::Select { scope, selector, value } => {
+                find_required(dom, desktop, scope, selector)?.select_item(value)
+            }
             Action::ExpandCollapse { scope, selector, state } => {
                 find_required(dom, desktop, scope, selector)?
                     .expand_collapse(*state == ExpandCollapseState::Expand)

@@ -180,12 +180,20 @@ pub enum Condition {
     /// Uses `SelectionItemPattern` — works for RadioButton, ListItem, TabItem, etc.
     /// `state: true` = selected, `state: false` = not selected.
     /// If `state` is omitted, passes for any selection state (verifies SelectionItemPattern is supported).
-    ElementSelected {
+    ItemSelected {
         scope: String,
         selector: SelectorPath,
         /// `Some(true)` = selected, `Some(false)` = not selected, `None` = any.
         #[serde(default)]
         state: Option<bool>,
+    },
+
+    /// True when the container element's current selection (via `ISelectionProvider.GetSelection()`)
+    /// matches `pattern`. Works on ComboBox, ListBox, TabControl etc. without expanding.
+    Selected {
+        scope: String,
+        selector: SelectorPath,
+        pattern: TextMatch,
     },
 
     /// Any application window matches the given attribute filters.
@@ -356,12 +364,24 @@ impl TryFrom<serde_yaml::Value> for Condition {
                     state,
                 })
             }
-            "ElementSelected" => {
+            "ItemSelected" => {
                 let state = map.get("state").and_then(|v| v.as_bool());
-                Ok(Condition::ElementSelected {
+                Ok(Condition::ItemSelected {
                     scope: req_str("scope")?,
                     selector: req_selector("selector")?,
                     state,
+                })
+            }
+            "Selected" => {
+                let pattern_val = map
+                    .get("pattern")
+                    .ok_or("Selected missing 'pattern'")?;
+                let pattern: TextMatch = serde_yaml::from_value(pattern_val.clone())
+                    .map_err(|e| format!("Selected.pattern: {e}"))?;
+                Ok(Condition::Selected {
+                    scope: req_str("scope")?,
+                    selector: req_selector("selector")?,
+                    pattern,
                 })
             }
             "WindowWithAttribute" => {
@@ -511,6 +531,15 @@ impl Condition {
                 selector: selector.clone(),
                 pattern: sub_tm(pattern),
             },
+            Condition::Selected {
+                scope,
+                selector,
+                pattern,
+            } => Condition::Selected {
+                scope: scope.clone(),
+                selector: selector.clone(),
+                pattern: sub_tm(pattern),
+            },
             Condition::AllOf { conditions } => Condition::AllOf {
                 conditions: conditions
                     .iter()
@@ -555,7 +584,8 @@ impl Condition {
             | Condition::ElementHasText { scope, .. }
             | Condition::ElementHasChildren { scope, .. }
             | Condition::ElementChecked { scope, .. }
-            | Condition::ElementSelected { scope, .. }
+            | Condition::ItemSelected { scope, .. }
+            | Condition::Selected { scope, .. }
             | Condition::DialogPresent { scope }
             | Condition::DialogAbsent { scope } => Some(scope),
             _ => None,
@@ -586,11 +616,14 @@ impl Condition {
                 Some(false) => format!("ElementChecked({scope}:{selector} off)"),
                 None        => format!("ElementChecked({scope}:{selector})"),
             },
-            Condition::ElementSelected { scope, selector, state } => match state {
-                Some(true)  => format!("ElementSelected({scope}:{selector} selected)"),
-                Some(false) => format!("ElementSelected({scope}:{selector} not-selected)"),
-                None        => format!("ElementSelected({scope}:{selector})"),
+            Condition::ItemSelected { scope, selector, state } => match state {
+                Some(true)  => format!("ItemSelected({scope}:{selector} selected)"),
+                Some(false) => format!("ItemSelected({scope}:{selector} not-selected)"),
+                None        => format!("ItemSelected({scope}:{selector})"),
             },
+            Condition::Selected { scope, selector, pattern } => {
+                format!("Selected({scope}:{selector} {pattern:?})")
+            }
             Condition::WindowWithAttribute {
                 title,
                 automation_id,
@@ -698,7 +731,7 @@ impl Condition {
                     (Some(actual), Some(expected)) => actual == *expected,
                 })
             }
-            Condition::ElementSelected { scope, selector, state } => {
+            Condition::ItemSelected { scope, selector, state } => {
                 let sel = find_in_scope(dom, desktop, scope, selector)?
                     .map(|el| el.is_selected())
                     .transpose()?
@@ -708,6 +741,14 @@ impl Condition {
                     (Some(_), None) => true,      // has SelectionItemPattern, any state
                     (Some(actual), Some(expected)) => actual == *expected,
                 })
+            }
+            Condition::Selected { scope, selector, pattern } => {
+                let text = find_in_scope(dom, desktop, scope, selector)?
+                    .map(|el| el.selection_text())
+                    .transpose()?
+                    .flatten()
+                    .unwrap_or_default();
+                Ok(pattern.test(&text))
             }
             Condition::WindowWithAttribute {
                 title,

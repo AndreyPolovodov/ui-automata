@@ -425,6 +425,33 @@
           ]
         },
         {
+          "description": "Select an item by display name inside a container (ComboBox, ListBox, etc.).\nUses `IItemContainerPattern.FindItemByProperty()` when available (no expand needed),\nfalling back to expand + find child + `SelectionItemPattern.Select()` + collapse.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id | help\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Select"
+            },
+            "value": {
+              "description": "Display name of the item to select (exact match).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "value"
+          ]
+        },
+        {
           "description": "Expand or collapse an element via `IExpandCollapsePattern`.\nUse `state: expand` to open a combo-box or tree node, `state: collapse` to close it.\nReturns an error if the element does not support `ExpandCollapsePattern`.",
           "type": "object",
           "properties": {
@@ -1097,7 +1124,7 @@
               "type": "boolean"
             },
             "type": {
-              "const": "ElementSelected"
+              "const": "ItemSelected"
             }
           },
           "additionalProperties": false,
@@ -1105,6 +1132,33 @@
             "type",
             "scope",
             "selector"
+          ]
+        },
+        {
+          "description": "True when the container element's current selection (via ISelectionProvider.GetSelection()) matches `pattern`. Works on ComboBox, ListBox, TabControl etc. without expanding.",
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "$ref": "#/$defs/TextMatch"
+            },
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "Selected"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "pattern"
           ]
         },
         {
