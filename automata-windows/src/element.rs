@@ -566,17 +566,27 @@ impl ui_automata::Element for UIElement {
     }
 
     fn select_item(&self, value: &str) -> Result<(), ui_automata::AutomataError> {
-        // Try ItemContainerPattern first — finds items without expanding
-        if let Ok(icp) = self.inner.get_pattern::<UIItemContainerPattern>() {
-            use uiautomation::types::UIProperty;
-            use uiautomation::variants::Variant;
-            if let Ok(item) = icp.find_item_by_property(self.inner.clone(), UIProperty::Name, Variant::from(value)) {
-                if let Ok(sip) = item.get_pattern::<UISelectionItemPattern>() {
-                    return sip.select().map_err(map_err).map_err(Into::into);
+        // Parse value: "~text" means contains, plain string means exact.
+        let (exact, needle): (bool, &str) = if let Some(s) = value.strip_prefix('~') {
+            (false, s)
+        } else {
+            (true, value)
+        };
+        let matches = |name: &str| if exact { name == needle } else { name.contains(needle) };
+
+        // For exact match, try ItemContainerPattern first (no expand needed).
+        if exact {
+            if let Ok(icp) = self.inner.get_pattern::<UIItemContainerPattern>() {
+                use uiautomation::types::UIProperty;
+                use uiautomation::variants::Variant;
+                if let Ok(item) = icp.find_item_by_property(self.inner.clone(), UIProperty::Name, Variant::from(needle)) {
+                    if let Ok(sip) = item.get_pattern::<UISelectionItemPattern>() {
+                        return sip.select().map_err(map_err).map_err(Into::into);
+                    }
                 }
             }
         }
-        // Fallback: expand → find descendant by name → select → collapse
+        // Fallback: expand → enumerate descendants → match → select → collapse
         let pat = self.inner.get_pattern::<UIExpandCollapsePattern>()
             .map_err(|_| ui_automata::AutomataError::Internal(format!(
                 "select_item: element '{}' supports neither ItemContainerPattern nor ExpandCollapsePattern",
@@ -587,7 +597,7 @@ impl ui_automata::Element for UIElement {
         let true_cond = auto.create_true_condition().map_err(map_err)?;
         let descendants = self.inner.find_all(TreeScope::Descendants, &true_cond).map_err(map_err)?;
         let item = descendants.into_iter()
-            .find(|el| el.get_name().unwrap_or_default() == value)
+            .find(|el| matches(&el.get_name().unwrap_or_default()))
             .ok_or_else(|| ui_automata::AutomataError::Internal(format!(
                 "select_item: item '{value}' not found in '{}'",
                 self.inner.get_name().unwrap_or_default()
