@@ -35,7 +35,7 @@ phases:
         expect:
           type: Not
           condition:
-            type: ItemSelected
+            type: ElementItemSelected
             scope: app
             selector: ">> [role='radio button'][name='Option A']"
 "#;
@@ -72,7 +72,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ItemSelected
+          type: ElementItemSelected
           scope: app
           selector: ">> [role='radio button'][name='Option A']"
           state: true
@@ -110,7 +110,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ItemSelected
+          type: ElementItemSelected
           scope: app
           selector: ">> [role='radio button'][name='Option A']"
           state: false
@@ -148,7 +148,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ItemSelected
+          type: ElementItemSelected
           scope: app
           selector: ">> [role='radio button'][name='Option A']"
           state: true
@@ -189,7 +189,7 @@ phases:
         expect:
           type: Not
           condition:
-            type: Selected
+            type: ElementSelected
             scope: app
             selector: ">> [role='combo box'][name=Options]"
             pattern:
@@ -228,7 +228,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: Selected
+          type: ElementSelected
           scope: app
           selector: ">> [role='combo box'][name=Options]"
           pattern:
@@ -269,7 +269,7 @@ phases:
         expect:
           type: Not
           condition:
-            type: Selected
+            type: ElementSelected
             scope: app
             selector: ">> [role='combo box'][name=Options]"
             pattern:
@@ -308,7 +308,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: Selected
+          type: ElementSelected
           scope: app
           selector: ">> [role='combo box'][name=Options]"
           pattern:
@@ -440,7 +440,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ItemSelected
+          type: ElementItemSelected
           scope: app
           selector: ">> [role='radio button']"
           state: true
@@ -467,7 +467,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: Selected
+          type: ElementSelected
           scope: app
           selector: ">> [role='combo box']"
           pattern:

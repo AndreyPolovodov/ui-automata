@@ -2,9 +2,9 @@ mod common;
 use common::*;
 use ui_automata::mock::mock_desktop_from_yaml;
 
-// ── ElementChecked condition ──────────────────────────────────────────────────
+// ── ElementToggled condition ──────────────────────────────────────────────────
 
-/// ElementChecked with no `state` passes for any toggle state.
+/// ElementToggled with no `state` passes for any toggle state.
 #[test]
 fn element_checked_no_state_passes_for_any_toggle() {
     let desktop = mock_desktop_from_yaml(
@@ -33,7 +33,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=Option]"
 "#;
@@ -41,7 +41,7 @@ phases:
     assert!(result.is_ok(), "{result:?}");
 }
 
-/// ElementChecked `state: true` matches a checked element.
+/// ElementToggled `state: true` matches a checked element.
 #[test]
 fn element_checked_true_matches_on() {
     let desktop = mock_desktop_from_yaml(
@@ -70,7 +70,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=Option]"
           state: true
@@ -79,7 +79,7 @@ phases:
     assert!(result.is_ok(), "{result:?}");
 }
 
-/// ElementChecked `state: false` matches an unchecked element.
+/// ElementToggled `state: false` matches an unchecked element.
 #[test]
 fn element_checked_false_matches_off() {
     let desktop = mock_desktop_from_yaml(
@@ -108,7 +108,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=Option]"
           state: false
@@ -117,7 +117,7 @@ phases:
     assert!(result.is_ok(), "{result:?}");
 }
 
-/// ElementChecked `state: "indeterminate"` matches an indeterminate element.
+/// ElementToggled `state: "indeterminate"` matches an indeterminate element.
 #[test]
 fn element_checked_indeterminate_matches() {
     let desktop = mock_desktop_from_yaml(
@@ -146,7 +146,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=Option]"
           state: "indeterminate"
@@ -155,7 +155,7 @@ phases:
     assert!(result.is_ok(), "{result:?}");
 }
 
-/// ElementChecked `state: true` fails when element is in indeterminate state.
+/// ElementToggled `state: true` fails when element is in indeterminate state.
 #[test]
 fn element_checked_true_fails_when_indeterminate() {
     let desktop = mock_desktop_from_yaml(
@@ -184,7 +184,7 @@ phases:
         action:
           type: NoOp
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=Option]"
           state: true
@@ -227,7 +227,7 @@ phases:
           selector: ">> [role='check box'][name=CB]"
           state: true
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=CB]"
           state: true
@@ -268,7 +268,7 @@ phases:
           selector: ">> [role='check box'][name=CB]"
           state: false
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=CB]"
           state: false
@@ -310,7 +310,7 @@ phases:
           selector: ">> [role='check box'][name=CB]"
           state: false
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=CB]"
           state: false
@@ -351,7 +351,7 @@ phases:
           selector: ">> [role='check box'][name=CB]"
           state: true
         expect:
-          type: ElementChecked
+          type: ElementToggled
           scope: app
           selector: ">> [role='check box'][name=CB]"
           state: true

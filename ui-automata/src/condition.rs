@@ -172,7 +172,7 @@ pub enum Condition {
     /// True when the element at `selector` under `scope` has a toggle state matching `state`.
     /// `state: true` = on, `state: false` = off, `state: "indeterminate"` = indeterminate.
     /// If `state` is omitted, passes for any toggle state (verifies TogglePattern is supported).
-    ElementChecked {
+    ElementToggled {
         scope: String,
         selector: SelectorPath,
         /// `Some(On/Off/Indeterminate)`, `None` = any.
@@ -184,7 +184,7 @@ pub enum Condition {
     /// Uses `SelectionItemPattern` — works for RadioButton, ListItem, TabItem, etc.
     /// `state: true` = selected, `state: false` = not selected.
     /// If `state` is omitted, passes for any selection state (verifies SelectionItemPattern is supported).
-    ItemSelected {
+    ElementItemSelected {
         scope: String,
         selector: SelectorPath,
         /// `Some(true)` = selected, `Some(false)` = not selected, `None` = any.
@@ -194,7 +194,7 @@ pub enum Condition {
 
     /// True when the container element's current selection (via `ISelectionProvider.GetSelection()`)
     /// matches `pattern`. Works on ComboBox, ListBox, TabControl etc. without expanding.
-    Selected {
+    ElementSelected {
         scope: String,
         selector: SelectorPath,
         pattern: TextMatch,
@@ -363,33 +363,33 @@ impl TryFrom<serde_yaml::Value> for Condition {
                 scope: req_str("scope")?,
                 selector: req_selector("selector")?,
             }),
-            "ElementChecked" => {
+            "ElementToggled" => {
                 let state = match map.get("state") {
                     None => None,
                     Some(v) => Some(serde_yaml::from_value::<ToggleValue>(v.clone())
                         .map_err(|e| e.to_string())?),
                 };
-                Ok(Condition::ElementChecked {
+                Ok(Condition::ElementToggled {
                     scope: req_str("scope")?,
                     selector: req_selector("selector")?,
                     state,
                 })
             }
-            "ItemSelected" => {
+            "ElementItemSelected" => {
                 let state = map.get("state").and_then(|v| v.as_bool());
-                Ok(Condition::ItemSelected {
+                Ok(Condition::ElementItemSelected {
                     scope: req_str("scope")?,
                     selector: req_selector("selector")?,
                     state,
                 })
             }
-            "Selected" => {
+            "ElementSelected" => {
                 let pattern_val = map
                     .get("pattern")
                     .ok_or("Selected missing 'pattern'")?;
                 let pattern: TextMatch = serde_yaml::from_value(pattern_val.clone())
                     .map_err(|e| format!("Selected.pattern: {e}"))?;
-                Ok(Condition::Selected {
+                Ok(Condition::ElementSelected {
                     scope: req_str("scope")?,
                     selector: req_selector("selector")?,
                     pattern,
@@ -543,11 +543,11 @@ impl Condition {
                 selector: selector.clone(),
                 pattern: sub_tm(pattern),
             },
-            Condition::Selected {
+            Condition::ElementSelected {
                 scope,
                 selector,
                 pattern,
-            } => Condition::Selected {
+            } => Condition::ElementSelected {
                 scope: scope.clone(),
                 selector: selector.clone(),
                 pattern: sub_tm(pattern),
@@ -596,9 +596,9 @@ impl Condition {
             | Condition::ElementVisible { scope, .. }
             | Condition::ElementHasText { scope, .. }
             | Condition::ElementHasChildren { scope, .. }
-            | Condition::ElementChecked { scope, .. }
-            | Condition::ItemSelected { scope, .. }
-            | Condition::Selected { scope, .. }
+            | Condition::ElementToggled { scope, .. }
+            | Condition::ElementItemSelected { scope, .. }
+            | Condition::ElementSelected { scope, .. }
             | Condition::DialogPresent { scope }
             | Condition::DialogAbsent { scope } => Some(scope),
             _ => None,
@@ -624,18 +624,18 @@ impl Condition {
             Condition::ElementHasChildren { scope, selector } => {
                 format!("ElementHasChildren({scope}:{selector})")
             }
-            Condition::ElementChecked { scope, selector, state } => match state {
-                Some(ToggleValue::On)            => format!("ElementChecked({scope}:{selector} on)"),
-                Some(ToggleValue::Off)           => format!("ElementChecked({scope}:{selector} off)"),
-                Some(ToggleValue::Indeterminate) => format!("ElementChecked({scope}:{selector} indeterminate)"),
-                None                             => format!("ElementChecked({scope}:{selector})"),
+            Condition::ElementToggled { scope, selector, state } => match state {
+                Some(ToggleValue::On)            => format!("ElementToggled({scope}:{selector} on)"),
+                Some(ToggleValue::Off)           => format!("ElementToggled({scope}:{selector} off)"),
+                Some(ToggleValue::Indeterminate) => format!("ElementToggled({scope}:{selector} indeterminate)"),
+                None                             => format!("ElementToggled({scope}:{selector})"),
             },
-            Condition::ItemSelected { scope, selector, state } => match state {
+            Condition::ElementItemSelected { scope, selector, state } => match state {
                 Some(true)  => format!("ItemSelected({scope}:{selector} selected)"),
                 Some(false) => format!("ItemSelected({scope}:{selector} not-selected)"),
                 None        => format!("ItemSelected({scope}:{selector})"),
             },
-            Condition::Selected { scope, selector, pattern } => {
+            Condition::ElementSelected { scope, selector, pattern } => {
                 format!("Selected({scope}:{selector} {pattern:?})")
             }
             Condition::WindowWithAttribute {
@@ -734,7 +734,7 @@ impl Condition {
                     .map(|ch| !ch.is_empty())
                     .unwrap_or(false))
             }
-            Condition::ElementChecked { scope, selector, state } => {
+            Condition::ElementToggled { scope, selector, state } => {
                 let ts = find_in_scope(dom, desktop, scope, selector)?
                     .map(|el| el.toggle_state())
                     .transpose()?
@@ -745,7 +745,7 @@ impl Condition {
                     (Some(actual), Some(expected))  => actual == *expected,
                 })
             }
-            Condition::ItemSelected { scope, selector, state } => {
+            Condition::ElementItemSelected { scope, selector, state } => {
                 let sel = find_in_scope(dom, desktop, scope, selector)?
                     .map(|el| el.is_selected())
                     .transpose()?
@@ -756,7 +756,7 @@ impl Condition {
                     (Some(actual), Some(expected)) => actual == *expected,
                 })
             }
-            Condition::Selected { scope, selector, pattern } => {
+            Condition::ElementSelected { scope, selector, pattern } => {
                 let text = find_in_scope(dom, desktop, scope, selector)?
                     .map(|el| el.selection_text())
                     .transpose()?
@@ -947,7 +947,13 @@ impl Condition {
             }
             Condition::Always => Ok(true),
             Condition::ExecSucceeded => {
-                Ok(locals.get(EXEC_EXIT_CODE_KEY).map(String::as_str) == Some("0"))
+                match locals.get(EXEC_EXIT_CODE_KEY).map(String::as_str) {
+                    Some("0") => Ok(true),
+                    Some(code) => Err(AutomataError::ConditionFalse(
+                        format!("exec exited with code {code}")
+                    )),
+                    None => Ok(false),
+                }
             }
             Condition::FileExists { path } => Ok(std::path::Path::new(path).exists()),
             Condition::Not { condition } => {

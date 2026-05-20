@@ -979,9 +979,9 @@ const ALL_CONDITION_TYPES: &[&str] = &[
     "ElementVisible",
     "ElementHasText",
     "ElementHasChildren",
-    "ElementChecked",
-    "ItemSelected",
-    "Selected",
+    "ElementToggled",
+    "ElementItemSelected",
+    "ElementSelected",
     "WindowWithAttribute",
     "ProcessRunning",
     "WindowClosed",
@@ -1028,14 +1028,14 @@ fn lint_condition(
     }
 
     match type_str {
-        "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" | "ElementChecked" | "ItemSelected" => {
+        "ElementFound" | "ElementEnabled" | "ElementVisible" | "ElementHasChildren" | "ElementToggled" | "ElementItemSelected" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
                 check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }
             require_str(v, "selector", path, diags);
             check_selector(v, "selector", path, diags);
         }
-        "ElementHasText" | "Selected" => {
+        "ElementHasText" | "ElementSelected" => {
             if let Some((scope, span)) = require_str(v, "scope", path, diags) {
                 check_scope_ref(scope, &span, anchors, mounted, path, "scope", diags);
             }

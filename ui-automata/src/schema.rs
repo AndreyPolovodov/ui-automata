@@ -186,13 +186,13 @@ impl JsonSchema for Condition {
             }));
         }
 
-        // ElementChecked — TogglePattern state check (CheckBox, ToggleButton)
+        // ElementToggled — TogglePattern state check (CheckBox, ToggleButton)
         variants.push(json!({
             "type": "object",
             "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = on/checked, `state: false` = off/unchecked, `state: \"indeterminate\"` = tri-state. Omit `state` to verify TogglePattern is supported without checking the value.",
             "required": ["type", "scope", "selector"],
             "properties": {
-                "type": { "const": "ElementChecked" },
+                "type": { "const": "ElementToggled" },
                 "scope": scope_s(),
                 "selector": selector_s(),
                 "state": {
@@ -212,7 +212,7 @@ impl JsonSchema for Condition {
             "description": "True when the matched element's selection state matches `state`. Uses SelectionItemPattern — works for RadioButton, ListItem, TabItem, etc. `state: true` = selected, `state: false` = not selected. Omit `state` to verify SelectionItemPattern is supported without checking the value.",
             "required": ["type", "scope", "selector"],
             "properties": {
-                "type": { "const": "ItemSelected" },
+                "type": { "const": "ElementItemSelected" },
                 "scope": scope_s(),
                 "selector": selector_s(),
                 "state": { "type": "boolean", "description": "Expected selection state: true = selected, false = not selected." }
@@ -226,7 +226,7 @@ impl JsonSchema for Condition {
             "description": "True when the container element's current selection (via ISelectionProvider.GetSelection()) matches `pattern`. Works on ComboBox, ListBox, TabControl etc. without expanding.",
             "required": ["type", "scope", "selector", "pattern"],
             "properties": {
-                "type": { "const": "Selected" },
+                "type": { "const": "ElementSelected" },
                 "scope": scope_s(),
                 "selector": selector_s(),
                 "pattern": text_match
