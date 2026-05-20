@@ -3,7 +3,7 @@
 /// Enabled via `#[cfg(any(test, feature = "mock"))]`.
 use std::sync::{Arc, Mutex};
 
-use crate::{AutomataError, Browser, ClickType, Desktop, Element, TabInfo};
+use crate::{AutomataError, Browser, ClickType, Desktop, Element, TabInfo, ToggleValue};
 
 // ── MockElement ───────────────────────────────────────────────────────────────
 
@@ -24,6 +24,8 @@ struct MockElementInner {
     pub is_selected: Option<bool>,
     /// SelectionPattern selected item name. `None` means pattern not supported.
     pub selection_text: Option<String>,
+    /// TogglePattern state. `None` means pattern not supported.
+    pub toggle_state: Mutex<Option<ToggleValue>>,
     pub alive: Mutex<bool>,
     pub children: Mutex<Vec<MockElement>>,
     pub parent: Mutex<Option<std::sync::Weak<MockElementInner>>>,
@@ -41,6 +43,7 @@ impl MockElement {
                 class_name: None,
                 is_selected: None,
                 selection_text: None,
+                toggle_state: Mutex::new(None),
                 alive: Mutex::new(true),
                 children: Mutex::new(vec![]),
                 parent: Mutex::new(None),
@@ -64,6 +67,7 @@ impl MockElement {
                 class_name: None,
                 is_selected: None,
                 selection_text: None,
+                toggle_state: Mutex::new(None),
                 alive: Mutex::new(true),
                 children: Mutex::new(vec![]),
                 parent: Mutex::new(None),
@@ -85,6 +89,7 @@ impl MockElement {
             class_name: None,
             is_selected: None,
             selection_text: None,
+            toggle_state: Mutex::new(None),
             alive: Mutex::new(true),
             children: Mutex::new(vec![]),
             parent: Mutex::new(None),
@@ -106,6 +111,7 @@ impl MockElement {
                 class_name: inner.class_name.clone(),
                 is_selected: Some(selected),
                 selection_text: inner.selection_text.clone(),
+                toggle_state: Mutex::new(*inner.toggle_state.lock().unwrap()),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
@@ -125,6 +131,7 @@ impl MockElement {
                 class_name: inner.class_name.clone(),
                 is_selected: inner.is_selected,
                 selection_text: Some(text.into()),
+                toggle_state: Mutex::new(*inner.toggle_state.lock().unwrap()),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
@@ -144,6 +151,7 @@ impl MockElement {
                 class_name: inner.class_name.clone(),
                 is_selected: inner.is_selected,
                 selection_text: inner.selection_text.clone(),
+                toggle_state: Mutex::new(*inner.toggle_state.lock().unwrap()),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
@@ -163,11 +171,18 @@ impl MockElement {
                 class_name: Some(cls.into()),
                 is_selected: inner.is_selected,
                 selection_text: inner.selection_text.clone(),
+                toggle_state: Mutex::new(*inner.toggle_state.lock().unwrap()),
                 alive: Mutex::new(*inner.alive.lock().unwrap()),
                 children: Mutex::new(inner.children.lock().unwrap().clone()),
                 parent: Mutex::new(None),
             }),
         }
+    }
+
+    /// Set the initial TogglePattern state (builder-style).
+    pub fn with_toggle_state(self, state: ToggleValue) -> Self {
+        *self.inner.toggle_state.lock().unwrap() = Some(state);
+        self
     }
 
     /// Mark the element as stale. `name()` will return `None`; interaction
@@ -307,6 +322,22 @@ impl Element for MockElement {
         Ok(self.inner.selection_text.clone())
     }
 
+    fn toggle_state(&self) -> Result<Option<ToggleValue>, AutomataError> {
+        Ok(*self.inner.toggle_state.lock().unwrap())
+    }
+
+    fn toggle(&self) -> Result<(), AutomataError> {
+        self.check_alive()?;
+        let mut ts = self.inner.toggle_state.lock().unwrap();
+        *ts = Some(match *ts {
+            Some(ToggleValue::On)            => ToggleValue::Off,
+            Some(ToggleValue::Off)           => ToggleValue::Indeterminate,
+            Some(ToggleValue::Indeterminate) => ToggleValue::On,
+            None => return Err(AutomataError::Platform("toggle: TogglePattern not supported".into())),
+        });
+        Ok(())
+    }
+
     fn focus(&self) -> Result<(), AutomataError> {
         self.check_alive()
     }
@@ -382,6 +413,8 @@ pub fn mock_desktop_from_yaml(yaml: &str) -> MockDesktop {
         #[serde(default)]
         selection_text: Option<String>,
         #[serde(default)]
+        toggle_state: Option<ToggleValue>,
+        #[serde(default)]
         children: Vec<YamlNode>,
         // layout fields — accepted but ignored
         #[serde(default)]
@@ -404,6 +437,7 @@ pub fn mock_desktop_from_yaml(yaml: &str) -> MockDesktop {
             class_name: n.class_name,
             is_selected: n.is_selected,
             selection_text: n.selection_text,
+            toggle_state: Mutex::new(n.toggle_state),
             alive: Mutex::new(true),
             children: Mutex::new(vec![]),
             parent: Mutex::new(None),

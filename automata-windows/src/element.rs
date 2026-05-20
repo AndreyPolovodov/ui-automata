@@ -522,12 +522,16 @@ impl ui_automata::Element for UIElement {
             .map_err(Into::into)
     }
 
-    fn toggle_state(&self) -> Result<Option<bool>, ui_automata::AutomataError> {
+    fn toggle_state(&self) -> Result<Option<ui_automata::ToggleValue>, ui_automata::AutomataError> {
         match self.inner.get_pattern::<UITogglePattern>() {
             Ok(tp) => {
                 let state = tp.get_toggle_state()
                     .map_err(|e| ui_automata::AutomataError::Platform(e.to_string()))?;
-                Ok(Some(state == ToggleState::On))
+                Ok(Some(match state {
+                    ToggleState::On  => ui_automata::ToggleValue::On,
+                    ToggleState::Off => ui_automata::ToggleValue::Off,
+                    _                => ui_automata::ToggleValue::Indeterminate,
+                }))
             }
             Err(_) => Ok(None),
         }

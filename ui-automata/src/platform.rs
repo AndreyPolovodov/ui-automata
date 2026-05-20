@@ -1,7 +1,61 @@
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::de::{self, Visitor};
+use std::fmt;
 
 use crate::AutomataError;
+
+/// Three-state toggle value for `TogglePattern` (CheckBox, ToggleButton).
+///
+/// Serializes as `true` / `false` / `"indeterminate"` so YAML configs can use
+/// `state: true`, `state: false`, or `state: "indeterminate"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToggleValue {
+    On,
+    Off,
+    Indeterminate,
+}
+
+impl ToggleValue {
+    /// Convert from a plain bool (backwards-compat helper used in `SetToggle`).
+    pub fn from_bool(b: bool) -> Self {
+        if b { ToggleValue::On } else { ToggleValue::Off }
+    }
+}
+
+impl Serialize for ToggleValue {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ToggleValue::On            => s.serialize_bool(true),
+            ToggleValue::Off           => s.serialize_bool(false),
+            ToggleValue::Indeterminate => s.serialize_str("indeterminate"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ToggleValue {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct TV;
+        impl<'de> Visitor<'de> for TV {
+            type Value = ToggleValue;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "true, false, or \"indeterminate\"")
+            }
+            fn visit_bool<E: de::Error>(self, v: bool) -> Result<ToggleValue, E> {
+                Ok(if v { ToggleValue::On } else { ToggleValue::Off })
+            }
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<ToggleValue, E> {
+                match v {
+                    "indeterminate" => Ok(ToggleValue::Indeterminate),
+                    "on"  | "true"  => Ok(ToggleValue::On),
+                    "off" | "false" => Ok(ToggleValue::Off),
+                    _ => Err(E::invalid_value(de::Unexpected::Str(v), &self)),
+                }
+            }
+        }
+        d.deserialize_any(TV)
+    }
+}
 
 // ── Browser / TabInfo ─────────────────────────────────────────────────────────
 
@@ -145,9 +199,9 @@ pub trait Element: Clone + 'static {
     }
 
     /// Query the toggle state of this element (CheckBox, ToggleButton, etc.).
-    /// Returns `Some(true)` if checked/on, `Some(false)` if unchecked/off,
+    /// Returns `Some(ToggleValue::On/Off/Indeterminate)` or
     /// `None` if the element does not support `TogglePattern`.
-    fn toggle_state(&self) -> Result<Option<bool>, AutomataError> {
+    fn toggle_state(&self) -> Result<Option<ToggleValue>, AutomataError> {
         Ok(None)
     }
 

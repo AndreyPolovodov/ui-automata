@@ -19,9 +19,9 @@ pub struct ElementNode {
     pub class_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    /// Toggle state for checkboxes and toggle buttons: `true` = checked/on, `false` = unchecked/off.
+    /// Toggle state for checkboxes and toggle buttons.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub toggle_state: Option<bool>,
+    pub toggle_state: Option<ui_automata::ToggleValue>,
     pub x: i32,
     pub y: i32,
     pub width: i32,
@@ -61,7 +61,7 @@ impl ui_automata::Element for ElementNode {
         Ok(self.text.clone().unwrap_or_default())
     }
 
-    fn toggle_state(&self) -> R<Option<bool>> {
+    fn toggle_state(&self) -> R<Option<ui_automata::ToggleValue>> {
         Ok(self.toggle_state)
     }
 
@@ -142,8 +142,8 @@ pub struct ElementFindResult {
     pub role: String,
     pub value: Option<String>,
     pub enabled: bool,
-    /// Toggle state for checkboxes: `Some(true)` = checked, `Some(false)` = unchecked, `None` = not a toggle element.
-    pub toggle_state: Option<bool>,
+    /// Toggle state for checkboxes.
+    pub toggle_state: Option<ui_automata::ToggleValue>,
     pub bounds: Option<(i32, i32, i32, i32)>,
     pub automation_id: Option<String>,
     pub pid: u32,
@@ -316,7 +316,11 @@ pub fn find_elements(
             let toggle_state = el.inner.get_pattern::<UITogglePattern>()
                 .ok()
                 .and_then(|tp| tp.get_toggle_state().ok())
-                .map(|s| s == ToggleState::On);
+                .map(|s| match s {
+                    ToggleState::On  => ui_automata::ToggleValue::On,
+                    ToggleState::Off => ui_automata::ToggleValue::Off,
+                    _                => ui_automata::ToggleValue::Indeterminate,
+                });
             let bounds = el
                 .inner
                 .get_bounding_rectangle()
@@ -485,7 +489,11 @@ fn walk_element(
         .get_pattern::<UITogglePattern>()
         .ok()
         .and_then(|tp| tp.get_toggle_state().ok())
-        .map(|s| s == ToggleState::On);
+        .map(|s| match s {
+            ToggleState::On  => ui_automata::ToggleValue::On,
+            ToggleState::Off => ui_automata::ToggleValue::Off,
+            _                => ui_automata::ToggleValue::Indeterminate,
+        });
 
     let children = if depth < MAX_DEPTH {
         element

@@ -457,15 +457,24 @@ impl Action {
             } => find_required(dom, desktop, scope, selector)?.set_value(value),
 
             Action::SetToggle { scope, selector, state } => {
+                use crate::ToggleValue;
+                let desired = ToggleValue::from_bool(*state);
                 let el = find_required(dom, desktop, scope, selector)?;
-                match el.toggle_state()? {
-                    None => Err(AutomataError::Internal(format!(
-                        "SetToggle: element '{}' does not support TogglePattern",
-                        selector
-                    ))),
-                    Some(current) if current == *state => Ok(()), // already in desired state
-                    _ => el.toggle(),
+                // Cycle via toggle() until we reach the desired state (max 3 times for tri-state).
+                for _ in 0..3 {
+                    match el.toggle_state()? {
+                        None => return Err(AutomataError::Internal(format!(
+                            "SetToggle: element '{}' does not support TogglePattern",
+                            selector
+                        ))),
+                        Some(ref current) if *current == desired => return Ok(()),
+                        _ => el.toggle()?,
+                    }
                 }
+                Err(AutomataError::Internal(format!(
+                    "SetToggle: could not reach state {:?} on '{}'",
+                    desired, selector
+                )))
             }
 
             Action::Select { scope, selector, value } => {

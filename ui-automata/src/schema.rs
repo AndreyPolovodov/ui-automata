@@ -189,13 +189,19 @@ impl JsonSchema for Condition {
         // ElementChecked — TogglePattern state check (CheckBox, ToggleButton)
         variants.push(json!({
             "type": "object",
-            "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = checked/on, `state: false` = unchecked/off. Omit `state` to verify TogglePattern is supported without checking the value.",
+            "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = on/checked, `state: false` = off/unchecked, `state: \"indeterminate\"` = tri-state. Omit `state` to verify TogglePattern is supported without checking the value.",
             "required": ["type", "scope", "selector"],
             "properties": {
                 "type": { "const": "ElementChecked" },
                 "scope": scope_s(),
                 "selector": selector_s(),
-                "state": { "type": "boolean", "description": "Expected toggle state: true = on/checked, false = off/unchecked." }
+                "state": {
+                    "oneOf": [
+                        { "type": "boolean", "description": "true = on/checked, false = off/unchecked" },
+                        { "type": "string", "const": "indeterminate", "description": "tri-state indeterminate" }
+                    ],
+                    "description": "Expected toggle state."
+                }
             },
             "additionalProperties": false
         }));
