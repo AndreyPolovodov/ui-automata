@@ -131,6 +131,9 @@ fn print_node(node: &automata_windows::ElementNode, indent: usize, remaining_dep
     if !value.is_empty() {
         out.push_str(&format!(" value={value:?}"));
     }
+    if let Some(ts) = node.toggle_state {
+        out.push_str(&format!(" toggle_state={ts}"));
+    }
     out.push_str(&format!(" rect=({},{},{},{})", node.x, node.y, node.width, node.height));
     println!("{out}");
 
@@ -219,6 +222,9 @@ fn run_interactive(hwnd: u64) {
             let value = m.text.as_deref().unwrap_or("");
             if !value.is_empty() {
                 out.push_str(&format!(" value={value:?}"));
+            }
+            if let Some(ts) = m.toggle_state {
+                out.push_str(&format!(" toggle_state={ts}"));
             }
             out.push_str(&format!(" rect=({},{},{},{})", m.x, m.y, m.width, m.height));
             println!("{out}");

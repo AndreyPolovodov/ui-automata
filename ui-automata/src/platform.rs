@@ -23,6 +23,16 @@ impl ToggleValue {
     }
 }
 
+impl fmt::Display for ToggleValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ToggleValue::On            => f.write_str("on"),
+            ToggleValue::Off           => f.write_str("off"),
+            ToggleValue::Indeterminate => f.write_str("indeterminate"),
+        }
+    }
+}
+
 impl Serialize for ToggleValue {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
