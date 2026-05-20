@@ -225,8 +225,10 @@ impl<D: Desktop> Executor<D> {
                 if Instant::now() >= deadline {
                     break;
                 }
-                // Action already failed deterministically — no point polling further.
-                if last_action_error.is_some() && matches!(step.on_failure, OnFailure::Abort) {
+                // Short-circuit only on a deterministic condition failure (e.g. SnapshotMatches
+                // dimension mismatch) — not on action errors, since the expect condition may
+                // still become satisfied while we wait (element could revive → recovery retry).
+                if condition_hint.is_some() {
                     break;
                 }
                 thread::sleep(POLL_INTERVAL);

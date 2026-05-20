@@ -845,6 +845,68 @@ phases:
     );
 }
 
+/// `ExecSucceeded` short-circuits the poll loop as soon as the exit code is
+/// available — unlike `ElementFound`, which keeps polling until the deadline.
+/// Without the early exit, a failed Exec with a long timeout would stall for
+/// the full duration before recovery could fire.
+#[cfg(target_os = "windows")]
+#[test]
+fn exec_failure_early_exits_poll_loop() {
+    let desktop = app_desktop();
+    let yaml = r#"
+name: test
+anchors:
+  app:
+    type: Root
+    selector: "[name=App]"
+recovery_handlers:
+  always:
+    trigger:
+      type: ElementFound
+      scope: app
+      selector: "[name=App]"
+    actions: []
+    resume: skip_step
+phases:
+  - name: main
+    mount: [app]
+    recovery:
+      handlers: [always]
+    steps:
+      - intent: exec exits 1 — poll must short-circuit, not wait 2s
+        action:
+          type: Exec
+          command: cmd
+          args: ["/c", "exit 1"]
+        expect:
+          type: ExecSucceeded
+        timeout: 2s
+      - intent: step 2 — reached only if step 1 recovery fired quickly
+        action:
+          type: NoOp
+        expect:
+          type: ElementFound
+          scope: app
+          selector: "[name=App]"
+        timeout: 100ms
+"#;
+    let start = std::time::Instant::now();
+    let (result, events) = run(yaml, desktop);
+    let elapsed = start.elapsed();
+
+    assert!(result.is_ok(), "workflow must succeed: {result:?}");
+    assert_eq!(
+        event_names(&events),
+        ["started:main", "completed:main", "Completed"]
+    );
+    // Early exit: should complete well under the 2s timeout.
+    // Allow 1s for process startup and CI overhead.
+    assert!(
+        elapsed.as_millis() < 1000,
+        "exec failure must exit poll early, but took {elapsed:?}"
+    );
+}
+
 /// `limit` caps how many times recovery can fire. Once the limit is reached
 /// the step is handled by `on_failure` policy (abort by default → error).
 #[test]
