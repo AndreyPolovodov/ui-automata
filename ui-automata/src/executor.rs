@@ -194,8 +194,14 @@ impl<D: Desktop> Executor<D> {
 
             let deadline = Instant::now() + timeout;
             let mut last_poll: Option<bool> = None;
+            let mut condition_hint: Option<String> = None;
             loop {
-                let satisfied = self.eval(&expect, state)?;
+                let (satisfied, hint) = match self.eval(&expect, state) {
+                    Ok(b) => (b, None),
+                    Err(crate::AutomataError::ConditionFalse(h)) => (false, Some(h)),
+                    Err(e) => return Err(e),
+                };
+                if hint.is_some() { condition_hint = hint; }
                 if last_poll != Some(satisfied) {
                     log::debug!("poll: {cond_desc} → {satisfied}");
                     last_poll = Some(satisfied);
@@ -219,13 +225,17 @@ impl<D: Desktop> Executor<D> {
                 if Instant::now() >= deadline {
                     break;
                 }
+                // Action already failed deterministically — no point polling further.
+                if last_action_error.is_some() && matches!(step.on_failure, OnFailure::Abort) {
+                    break;
+                }
                 thread::sleep(POLL_INTERVAL);
             }
 
-            let timeout_msg = format!(
-                "{label}: timed out (attempt {}), checking recovery",
-                attempts + 1
-            );
+            let timeout_msg = match &condition_hint {
+                Some(hint) => format!("{label}: timed out (attempt {}), checking recovery\n  hint: {hint}", attempts + 1),
+                None => format!("{label}: timed out (attempt {}), checking recovery", attempts + 1),
+            };
             self.log_warn(&timeout_msg);
 
             let all: Vec<(String, crate::Condition, Vec<Action>, ResumeStrategy)> = local_handlers

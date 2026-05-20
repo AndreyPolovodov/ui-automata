@@ -8,4 +8,8 @@ pub enum AutomataError {
     Platform(String),
     #[error("cancelled")]
     Cancelled,
+    /// Condition evaluated to false with a diagnostic reason.
+    /// Treated as Ok(false) by the poll loop but included in the timeout message.
+    #[error("{0}")]
+    ConditionFalse(String),
 }

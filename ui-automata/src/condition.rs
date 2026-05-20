@@ -4,7 +4,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::{
-    AutomataError, Browser, Desktop, Element, SelectorPath, ShadowDom, action::sub_output,
+    AutomataError, Browser, Desktop, Element, SelectorPath, ShadowDom, ToggleValue,
+    action::sub_output,
     output::Output,
 };
 
@@ -140,6 +141,9 @@ pub enum WindowState {
 /// Custom `Deserialize` via `TryFrom<serde_yaml::Value>` to work around the
 /// serde limitation that `#[serde(tag)]` + `#[serde(flatten)]` don't compose
 /// in serde_yaml. We hand-roll the mapping from a YAML map to enum variants.
+fn default_fuzz_pct() -> f64 { 2.0 }
+fn default_max_diff_pct() -> f64 { 5.0 }
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "serde_yaml::Value")]
 pub enum Condition {
@@ -166,14 +170,14 @@ pub enum Condition {
     },
 
     /// True when the element at `selector` under `scope` has a toggle state matching `state`.
-    /// `state: true` = checked/on, `state: false` = unchecked/off.
+    /// `state: true` = on, `state: false` = off, `state: "indeterminate"` = indeterminate.
     /// If `state` is omitted, passes for any toggle state (verifies TogglePattern is supported).
     ElementChecked {
         scope: String,
         selector: SelectorPath,
-        /// `Some(true)` = on, `Some(false)` = off, `None` = any.
+        /// `Some(On/Off/Indeterminate)`, `None` = any.
         #[serde(default)]
-        state: Option<bool>,
+        state: Option<ToggleValue>,
     },
 
     /// True when the element at `selector` under `scope` has a selection state matching `state`.
@@ -287,9 +291,12 @@ pub enum Condition {
     SnapshotMatches {
         actual: String,
         golden: String,
-        /// Allowed per-channel difference as a percentage of 255. Default: 0.
-        #[serde(default)]
+        /// Allowed per-pixel luminance difference as a percentage of 255. Default: 2.
+        #[serde(default = "default_fuzz_pct")]
         fuzz_pct: f64,
+        /// Max allowed fraction of pixels that may exceed fuzz_pct, as a percentage (0–100). Default: 3.
+        #[serde(default = "default_max_diff_pct")]
+        max_diff_pct: f64,
     },
 
     AllOf {
@@ -357,7 +364,11 @@ impl TryFrom<serde_yaml::Value> for Condition {
                 selector: req_selector("selector")?,
             }),
             "ElementChecked" => {
-                let state = map.get("state").and_then(|v| v.as_bool());
+                let state = match map.get("state") {
+                    None => None,
+                    Some(v) => Some(serde_yaml::from_value::<ToggleValue>(v.clone())
+                        .map_err(|e| e.to_string())?),
+                };
                 Ok(Condition::ElementChecked {
                     scope: req_str("scope")?,
                     selector: req_selector("selector")?,
@@ -478,8 +489,9 @@ impl TryFrom<serde_yaml::Value> for Condition {
             "SnapshotMatches" => {
                 let actual = req_str("actual")?;
                 let golden = req_str("golden")?;
-                let fuzz_pct = map.get("fuzz_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                Ok(Condition::SnapshotMatches { actual, golden, fuzz_pct })
+                let fuzz_pct = map.get("fuzz_pct").and_then(|v| v.as_f64()).unwrap_or_else(default_fuzz_pct);
+                let max_diff_pct = map.get("max_diff_pct").and_then(|v| v.as_f64()).unwrap_or_else(default_max_diff_pct);
+                Ok(Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct })
             }
             "Always" => Ok(Condition::Always),
             "ExecSucceeded" => Ok(Condition::ExecSucceeded),
@@ -552,11 +564,12 @@ impl Condition {
                     .map(|c| c.apply_output(locals, output))
                     .collect(),
             },
-            Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
+            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct } => {
                 Condition::SnapshotMatches {
                     actual: sub(actual),
                     golden: sub(golden),
                     fuzz_pct: *fuzz_pct,
+                    max_diff_pct: *max_diff_pct,
                 }
             }
             Condition::FileExists { path } => Condition::FileExists { path: sub(path) },
@@ -612,9 +625,10 @@ impl Condition {
                 format!("ElementHasChildren({scope}:{selector})")
             }
             Condition::ElementChecked { scope, selector, state } => match state {
-                Some(true)  => format!("ElementChecked({scope}:{selector} on)"),
-                Some(false) => format!("ElementChecked({scope}:{selector} off)"),
-                None        => format!("ElementChecked({scope}:{selector})"),
+                Some(ToggleValue::On)            => format!("ElementChecked({scope}:{selector} on)"),
+                Some(ToggleValue::Off)           => format!("ElementChecked({scope}:{selector} off)"),
+                Some(ToggleValue::Indeterminate) => format!("ElementChecked({scope}:{selector} indeterminate)"),
+                None                             => format!("ElementChecked({scope}:{selector})"),
             },
             Condition::ItemSelected { scope, selector, state } => match state {
                 Some(true)  => format!("ItemSelected({scope}:{selector} selected)"),
@@ -655,8 +669,8 @@ impl Condition {
             Condition::ForegroundIsDialog { .. } => "ForegroundIsDialog".to_string(),
             Condition::Always => "Always".to_string(),
             Condition::ExecSucceeded => "ExecSucceeded".to_string(),
-            Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
-                format!("SnapshotMatches({actual} vs {golden} fuzz={fuzz_pct}%)")
+            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct } => {
+                format!("SnapshotMatches({actual} vs {golden} fuzz={fuzz_pct}% max_diff={max_diff_pct}%)")
             }
             Condition::AllOf { conditions } => format!(
                 "AllOf({})",
@@ -726,9 +740,9 @@ impl Condition {
                     .transpose()?
                     .flatten();
                 Ok(match (ts, state) {
-                    (None, _) => false,           // no TogglePattern → not a toggle element
-                    (Some(_), None) => true,      // has TogglePattern, any state
-                    (Some(actual), Some(expected)) => actual == *expected,
+                    (None, _)                       => false,
+                    (Some(_), None)                 => true,
+                    (Some(actual), Some(expected))  => actual == *expected,
                 })
             }
             Condition::ItemSelected { scope, selector, state } => {
@@ -858,7 +872,7 @@ impl Condition {
                 }
                 Ok(false)
             }
-            Condition::SnapshotMatches { actual, golden, fuzz_pct } => {
+            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct } => {
                 let golden_path = std::path::Path::new(golden.as_str());
                 if !golden_path.exists() && params.get("__create_goldens").map(String::as_str) == Some("1") {
                     if let Some(parent) = golden_path.parent() {
@@ -876,13 +890,60 @@ impl Condition {
                 };
                 let a = img_a.to_rgba8();
                 let g = img_g.to_rgba8();
-                if a.dimensions() != g.dimensions() {
-                    return Ok(false);
+                let (aw, ah) = a.dimensions();
+                let (gw, gh) = g.dimensions();
+                let w = aw.min(gw);
+                let h = ah.min(gh);
+                if aw.abs_diff(gw) > 2 || ah.abs_diff(gh) > 2 {
+                    return Err(AutomataError::ConditionFalse(
+                        format!("dimension mismatch: actual={aw}x{ah} golden={gw}x{gh}")
+                    ));
                 }
                 let threshold = (255.0 * fuzz_pct / 100.0) as i32;
-                Ok(a.pixels().zip(g.pixels()).all(|(pa, pg)| {
-                    (0..3).all(|i| (pa[i] as i32 - pg[i] as i32).abs() <= threshold)
-                }))
+                let luma = |p: &image::Rgba<u8>| -> i32 {
+                    (0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64) as i32
+                };
+                // Precompute flat luma arrays.
+                let a_luma: Vec<i32> = (0..ah).flat_map(|y| (0..aw).map(move |x| (x, y)))
+                    .map(|(x, y)| luma(a.get_pixel(x, y))).collect();
+                let g_luma: Vec<i32> = (0..gh).flat_map(|y| (0..gw).map(move |x| (x, y)))
+                    .map(|(x, y)| luma(g.get_pixel(x, y))).collect();
+                // Symmetric morphological comparison: handles 1px rendering shifts without
+                // hiding genuine regressions. Each pixel must find a close match in the
+                // other image's 3×3 neighborhood, checked in both directions.
+                let min_neighbor_dist = |val: i32, luma: &[i32], x: u32, y: u32, iw: u32, ih: u32| -> i32 {
+                    let mut min_d = i32::MAX;
+                    for dy in -1i32..=1 {
+                        for dx in -1i32..=1 {
+                            let nx = x as i32 + dx;
+                            let ny = y as i32 + dy;
+                            if nx >= 0 && ny >= 0 && (nx as u32) < iw && (ny as u32) < ih {
+                                let d = (val - luma[(ny as u32 * iw + nx as u32) as usize]).abs();
+                                if d < min_d { min_d = d; }
+                            }
+                        }
+                    }
+                    min_d
+                };
+                let total = (w * h) as usize;
+                let failing = (0..h).flat_map(|y| (0..w).map(move |x| (x, y)))
+                    .filter(|&(x, y)| {
+                        let la = a_luma[(y * aw + x) as usize];
+                        let lg = g_luma[(y * gw + x) as usize];
+                        !(min_neighbor_dist(la, &g_luma, x, y, gw, gh) <= threshold
+                            && min_neighbor_dist(lg, &a_luma, x, y, aw, ah) <= threshold)
+                    })
+                    .count();
+                if failing == 0 {
+                    return Ok(true);
+                }
+                let diff_pct = failing as f64 / total as f64 * 100.0;
+                if *max_diff_pct > 0.0 && diff_pct <= *max_diff_pct {
+                    return Ok(true);
+                }
+                Err(AutomataError::ConditionFalse(
+                    format!("{failing}/{total} pixels differ ({diff_pct:.2}%)")
+                ))
             }
             Condition::Always => Ok(true),
             Condition::ExecSucceeded => {

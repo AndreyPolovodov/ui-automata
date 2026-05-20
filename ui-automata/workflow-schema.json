@@ -338,6 +338,23 @@
           ]
         },
         {
+          "description": "Maximize the window for `scope` via WindowPattern.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "MaximizeWindow"
+            }
+          },
+          "required": [
+            "type",
+            "scope"
+          ]
+        },
+        {
           "description": "Close the window for `scope` via its close button (sends WM_CLOSE).",
           "type": "object",
           "properties": {
@@ -405,6 +422,33 @@
             "scope",
             "selector",
             "state"
+          ]
+        },
+        {
+          "description": "Select an item by display name inside a container (ComboBox, ListBox, etc.).\nUses `IItemContainerPattern.FindItemByProperty()` when available (no expand needed),\nfalling back to expand + find child + `SelectionItemPattern.Select()` + collapse.",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            },
+            "selector": {
+              "description": "CSS-like path for navigating the UIA element tree.\n\nSyntax: [Combinator] Step [Combinator Step]*\n  Step      = [attr Op value]+ [:nth(n)] [:parent | :ancestor(n)]\n  Combinator = \">\" (direct child) | \">>\" (any descendant)\n  attr      = role | name | title | id | help\n  Op        = \"=\" exact | \"~=\" contains | \"^=\" starts-with | \"$=\" ends-with\n  :parent         navigate to the matched element's parent\n  :ancestor(n)    navigate n levels up (1 = parent)\n\nNo leading combinator: first step matches the scope root element itself.\nLeading >> or >: searches inside the scope root without re-matching it (use when scope IS the container).\n\nExamples:\n  \"[name~=Notepad]\"                                     root match by title substring\n  \">> [role=button][name=Close]\"                        any descendant button\n  \">> [role=title bar] > [role=button]\"                 child of a descendant\n  \">> [role=group]:nth(1)\"                              second group child (0-indexed)\n  \">> [role=button][name^=Don][name$=Save]\"             starts/ends-with for special chars\n  \">> [role=button][name=Performance]:parent > *:nth(9)\" 9th sibling of Performance",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Select"
+            },
+            "value": {
+              "description": "Display name of the item to select (exact match).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "value"
           ]
         },
         {
@@ -658,6 +702,36 @@
             "type",
             "source",
             "destination"
+          ]
+        },
+        {
+          "description": "Capture a rectangular screenshot of an element or window and save it as PNG.\n\nIf `selector` is given, the captured region is the bounding box of the first\nmatched element. Otherwise the entire scope window is captured.\nParent directories of `path` are created automatically.\n`path` supports `{workflow.dir}`, `{output.*}`, and `{param.*}` substitution.",
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "Output file path (PNG). Supports variable substitution.",
+              "type": "string"
+            },
+            "scope": {
+              "description": "Anchor name providing the search root and window coordinates.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Narrow the capture region to a specific element's bounds.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "CaptureSnapshot"
+            }
+          },
+          "required": [
+            "type",
+            "scope",
+            "path"
           ]
         },
         {
@@ -1007,7 +1081,7 @@
           ]
         },
         {
-          "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = checked/on, `state: false` = unchecked/off. Omit `state` to verify TogglePattern is supported without checking the value.",
+          "description": "True when the matched element's toggle state matches `state`. Uses TogglePattern — works for CheckBox and ToggleButton. `state: true` = on/checked, `state: false` = off/unchecked, `state: \"indeterminate\"` = tri-state. Omit `state` to verify TogglePattern is supported without checking the value.",
           "type": "object",
           "properties": {
             "scope": {
@@ -1019,8 +1093,18 @@
               "type": "string"
             },
             "state": {
-              "description": "Expected toggle state: true = on/checked, false = off/unchecked.",
-              "type": "boolean"
+              "description": "Expected toggle state.",
+              "oneOf": [
+                {
+                  "description": "true = on/checked, false = off/unchecked",
+                  "type": "boolean"
+                },
+                {
+                  "description": "tri-state indeterminate",
+                  "type": "string",
+                  "const": "indeterminate"
+                }
+              ]
             },
             "type": {
               "const": "ElementChecked"
@@ -1050,7 +1134,7 @@
               "type": "boolean"
             },
             "type": {
-              "const": "ElementSelected"
+              "const": "ItemSelected"
             }
           },
           "additionalProperties": false,
@@ -1058,6 +1142,33 @@
             "type",
             "scope",
             "selector"
+          ]
+        },
+        {
+          "description": "True when the container element's current selection (via ISelectionProvider.GetSelection()) matches `pattern`. Works on ComboBox, ListBox, TabControl etc. without expanding.",
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "$ref": "#/$defs/TextMatch"
+            },
+            "scope": {
+              "description": "Anchor name to resolve the element tree from.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "Selector path within the scope anchor.",
+              "type": "string"
+            },
+            "type": {
+              "const": "Selected"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "scope",
+            "selector",
+            "pattern"
           ]
         },
         {
@@ -1217,6 +1328,41 @@
           "required": [
             "type",
             "scope"
+          ]
+        },
+        {
+          "description": "True when two PNG files match within the given tolerance. Comparison is luminance-based (Y = 0.299R + 0.587G + 0.114B) with a symmetric 3×3 morphological window to tolerate 1-pixel rendering shifts. Returns a diagnostic hint on timeout if dimensions differ by more than 2px or too many pixels differ. Both paths support {output.*} substitution.",
+          "type": "object",
+          "properties": {
+            "actual": {
+              "description": "Path to the captured image. Supports {output.*} substitution.",
+              "type": "string"
+            },
+            "fuzz_pct": {
+              "description": "Allowed per-pixel luminance difference as a percentage of 255. Default: 2.",
+              "type": "number",
+              "maximum": 100,
+              "minimum": 0
+            },
+            "golden": {
+              "description": "Path to the reference image. Supports {output.*} substitution.",
+              "type": "string"
+            },
+            "max_diff_pct": {
+              "description": "Max fraction of pixels allowed to exceed fuzz_pct, as a percentage (0–100). Default: 5. Set to 0 to require all pixels to match.",
+              "type": "number",
+              "maximum": 100,
+              "minimum": 0
+            },
+            "type": {
+              "const": "SnapshotMatches"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "actual",
+            "golden"
           ]
         },
         {
