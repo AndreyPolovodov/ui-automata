@@ -1107,7 +1107,7 @@
               ]
             },
             "type": {
-              "const": "ElementChecked"
+              "const": "ElementToggled"
             }
           },
           "additionalProperties": false,
@@ -1134,7 +1134,7 @@
               "type": "boolean"
             },
             "type": {
-              "const": "ItemSelected"
+              "const": "ElementItemSelected"
             }
           },
           "additionalProperties": false,
@@ -1160,7 +1160,7 @@
               "type": "string"
             },
             "type": {
-              "const": "Selected"
+              "const": "ElementSelected"
             }
           },
           "additionalProperties": false,
@@ -1331,7 +1331,7 @@
           ]
         },
         {
-          "description": "True when two PNG files match within the given tolerance. Comparison is luminance-based (Y = 0.299R + 0.587G + 0.114B) with a symmetric 3×3 morphological window to tolerate 1-pixel rendering shifts. Returns a diagnostic hint on timeout if dimensions differ by more than 2px or too many pixels differ. Both paths support {output.*} substitution.",
+          "description": "True when two PNG files are pixel-equivalent within the given tolerance. Each pixel is compared per RGB channel; a pixel matches if every channel differs by at most fuzz_pct/100*255. Returns false if either file is missing or dimensions differ. Both paths support {output.*} substitution.",
           "type": "object",
           "properties": {
             "actual": {
@@ -1339,7 +1339,7 @@
               "type": "string"
             },
             "fuzz_pct": {
-              "description": "Allowed per-pixel luminance difference as a percentage of 255. Default: 2.",
+              "description": "Allowed per-channel difference as a percentage of 255. Default: 0.",
               "type": "number",
               "maximum": 100,
               "minimum": 0
@@ -1347,12 +1347,6 @@
             "golden": {
               "description": "Path to the reference image. Supports {output.*} substitution.",
               "type": "string"
-            },
-            "max_diff_pct": {
-              "description": "Max fraction of pixels allowed to exceed fuzz_pct, as a percentage (0–100). Default: 5. Set to 0 to require all pixels to match.",
-              "type": "number",
-              "maximum": 100,
-              "minimum": 0
             },
             "type": {
               "const": "SnapshotMatches"
