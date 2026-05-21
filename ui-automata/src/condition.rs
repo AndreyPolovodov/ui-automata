@@ -142,7 +142,37 @@ pub enum WindowState {
 /// serde limitation that `#[serde(tag)]` + `#[serde(flatten)]` don't compose
 /// in serde_yaml. We hand-roll the mapping from a YAML map to enum variants.
 fn default_fuzz_pct() -> f64 { 2.0 }
-fn default_max_diff_pct() -> f64 { 5.0 }
+fn default_max_diff_pct() -> f64 { 4.0 }
+fn default_downscale() -> u32 { 8 }
+
+/// Box-filter downscale by integer factor `k`. Output dimensions are floor(w/k) × floor(h/k);
+/// each output pixel is the mean of the corresponding k×k block of inputs.
+///
+/// Why: high-frequency rendering noise (text antialiasing, subpixel shifts) gets averaged
+/// out into nearby pixels and becomes invisible after downscaling. Meanwhile, large-scale
+/// pattern differences — like a 1px solid vs 1px-dotted line — collapse into mean intensity:
+/// the dotted line's row averages to a half-density (lighter) tone vs the solid line's row.
+/// That now shows up as a per-pixel intensity diff that the standard luma comparison sees.
+fn downscale_luma(luma: &[i32], w: u32, h: u32, k: u32) -> (Vec<i32>, u32, u32) {
+    let ow = w / k;
+    let oh = h / k;
+    let mut out = Vec::with_capacity((ow * oh) as usize);
+    let k2 = (k * k) as i64;
+    for oy in 0..oh {
+        for ox in 0..ow {
+            let mut sum: i64 = 0;
+            for dy in 0..k {
+                for dx in 0..k {
+                    let x = ox * k + dx;
+                    let y = oy * k + dy;
+                    sum += luma[(y * w + x) as usize] as i64;
+                }
+            }
+            out.push((sum / k2) as i32);
+        }
+    }
+    (out, ow, oh)
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "serde_yaml::Value")]
@@ -294,9 +324,15 @@ pub enum Condition {
         /// Allowed per-pixel luminance difference as a percentage of 255. Default: 2.
         #[serde(default = "default_fuzz_pct")]
         fuzz_pct: f64,
-        /// Max allowed fraction of pixels that may exceed fuzz_pct, as a percentage (0–100). Default: 3.
+        /// Max allowed fraction of pixels that may exceed fuzz_pct, as a percentage (0–100). Default: 5.
         #[serde(default = "default_max_diff_pct")]
         max_diff_pct: f64,
+        /// Box-filter downscale factor applied to both images before comparison. Default: 1 (no downscale).
+        /// Use larger values (e.g. 4, 8) to suppress high-frequency noise (text antialiasing) and
+        /// expose low-frequency pattern differences — useful when 1px-wide visual differences
+        /// like solid-vs-dotted lines are masked by per-run rendering jitter.
+        #[serde(default = "default_downscale")]
+        downscale: u32,
     },
 
     AllOf {
@@ -491,7 +527,12 @@ impl TryFrom<serde_yaml::Value> for Condition {
                 let golden = req_str("golden")?;
                 let fuzz_pct = map.get("fuzz_pct").and_then(|v| v.as_f64()).unwrap_or_else(default_fuzz_pct);
                 let max_diff_pct = map.get("max_diff_pct").and_then(|v| v.as_f64()).unwrap_or_else(default_max_diff_pct);
-                Ok(Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct })
+                let downscale = map.get("downscale").and_then(|v| v.as_u64())
+                    .map(|v| v as u32).unwrap_or_else(default_downscale);
+                if downscale == 0 {
+                    return Err("SnapshotMatches: downscale must be >= 1".into());
+                }
+                Ok(Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct, downscale })
             }
             "Always" => Ok(Condition::Always),
             "ExecSucceeded" => Ok(Condition::ExecSucceeded),
@@ -564,12 +605,13 @@ impl Condition {
                     .map(|c| c.apply_output(locals, output))
                     .collect(),
             },
-            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct } => {
+            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct, downscale } => {
                 Condition::SnapshotMatches {
                     actual: sub(actual),
                     golden: sub(golden),
                     fuzz_pct: *fuzz_pct,
                     max_diff_pct: *max_diff_pct,
+                    downscale: *downscale,
                 }
             }
             Condition::FileExists { path } => Condition::FileExists { path: sub(path) },
@@ -669,8 +711,8 @@ impl Condition {
             Condition::ForegroundIsDialog { .. } => "ForegroundIsDialog".to_string(),
             Condition::Always => "Always".to_string(),
             Condition::ExecSucceeded => "ExecSucceeded".to_string(),
-            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct } => {
-                format!("SnapshotMatches({actual} vs {golden} fuzz={fuzz_pct}% max_diff={max_diff_pct}%)")
+            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct, downscale } => {
+                format!("SnapshotMatches({actual} vs {golden} downscale={downscale}x fuzz={fuzz_pct}% max_diff={max_diff_pct}%)")
             }
             Condition::AllOf { conditions } => format!(
                 "AllOf({})",
@@ -872,7 +914,7 @@ impl Condition {
                 }
                 Ok(false)
             }
-            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct } => {
+            Condition::SnapshotMatches { actual, golden, fuzz_pct, max_diff_pct, downscale } => {
                 let golden_path = std::path::Path::new(golden.as_str());
                 if !golden_path.exists() && params.get("__create_goldens").map(String::as_str) == Some("1") {
                     if let Some(parent) = golden_path.parent() {
@@ -892,22 +934,35 @@ impl Condition {
                 let g = img_g.to_rgba8();
                 let (aw, ah) = a.dimensions();
                 let (gw, gh) = g.dimensions();
-                let w = aw.min(gw);
-                let h = ah.min(gh);
                 if aw.abs_diff(gw) > 2 || ah.abs_diff(gh) > 2 {
                     return Err(AutomataError::ConditionFalse(
                         format!("dimension mismatch: actual={aw}x{ah} golden={gw}x{gh}")
                     ));
                 }
-                let threshold = (255.0 * fuzz_pct / 100.0) as i32;
                 let luma = |p: &image::Rgba<u8>| -> i32 {
                     (0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64) as i32
                 };
-                // Precompute flat luma arrays.
-                let a_luma: Vec<i32> = (0..ah).flat_map(|y| (0..aw).map(move |x| (x, y)))
+                let a_luma_full: Vec<i32> = (0..ah).flat_map(|y| (0..aw).map(move |x| (x, y)))
                     .map(|(x, y)| luma(a.get_pixel(x, y))).collect();
-                let g_luma: Vec<i32> = (0..gh).flat_map(|y| (0..gw).map(move |x| (x, y)))
+                let g_luma_full: Vec<i32> = (0..gh).flat_map(|y| (0..gw).map(move |x| (x, y)))
                     .map(|(x, y)| luma(g.get_pixel(x, y))).collect();
+
+                // Apply box-filter downscale before comparison. The default (k=8) suppresses
+                // high-frequency rendering jitter (text antialiasing) and exposes low-frequency
+                // pattern differences (1px solid vs 1px-dotted lines collapse to different mean
+                // intensities at the same coarse position).
+                let k = (*downscale).max(1);
+                let (a_buf, aw2, ah2) = if k == 1 { (a_luma_full, aw, ah) } else { downscale_luma(&a_luma_full, aw, ah, k) };
+                let (g_buf, gw2, gh2) = if k == 1 { (g_luma_full, gw, gh) } else { downscale_luma(&g_luma_full, gw, gh, k) };
+                let w = aw2.min(gw2);
+                let h = ah2.min(gh2);
+                if w == 0 || h == 0 {
+                    return Err(AutomataError::ConditionFalse(
+                        format!("image too small for downscale={k}: {aw}x{ah}")
+                    ));
+                }
+
+                let threshold = (255.0 * fuzz_pct / 100.0) as i32;
                 // Symmetric morphological comparison: handles 1px rendering shifts without
                 // hiding genuine regressions. Each pixel must find a close match in the
                 // other image's 3×3 neighborhood, checked in both directions.
@@ -928,10 +983,10 @@ impl Condition {
                 let total = (w * h) as usize;
                 let failing = (0..h).flat_map(|y| (0..w).map(move |x| (x, y)))
                     .filter(|&(x, y)| {
-                        let la = a_luma[(y * aw + x) as usize];
-                        let lg = g_luma[(y * gw + x) as usize];
-                        !(min_neighbor_dist(la, &g_luma, x, y, gw, gh) <= threshold
-                            && min_neighbor_dist(lg, &a_luma, x, y, aw, ah) <= threshold)
+                        let la = a_buf[(y * aw2 + x) as usize];
+                        let lg = g_buf[(y * gw2 + x) as usize];
+                        !(min_neighbor_dist(la, &g_buf, x, y, gw2, gh2) <= threshold
+                            && min_neighbor_dist(lg, &a_buf, x, y, aw2, ah2) <= threshold)
                     })
                     .count();
                 if failing == 0 {

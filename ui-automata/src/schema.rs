@@ -350,7 +350,9 @@ impl JsonSchema for Condition {
                 "type": { "const": "SnapshotMatches" },
                 "actual": { "type": "string", "description": "Path to the captured image. Supports {output.*} substitution." },
                 "golden": { "type": "string", "description": "Path to the reference image. Supports {output.*} substitution." },
-                "fuzz_pct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Allowed per-channel difference as a percentage of 255. Default: 0." }
+                "fuzz_pct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Allowed per-pixel luma difference as a percentage of 255. Uses 3×3 neighborhood matching. Default: 2." },
+                "max_diff_pct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Maximum allowed fraction of pixels that may exceed fuzz_pct, as a percentage of total pixels (0–100). Default: 4." },
+                "downscale": { "type": "integer", "minimum": 1, "description": "Box-filter downscale factor applied to both images before comparison. Suppresses high-frequency rendering noise (text antialiasing) and exposes low-frequency pattern differences (e.g. solid vs dotted lines). Default: 8. Lower (e.g. 1) for small UI elements where 8×-shrunk image becomes too tiny." }
             },
             "additionalProperties": false
         }));
