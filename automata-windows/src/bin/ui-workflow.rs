@@ -224,18 +224,10 @@ fn main() {
     if pipe_mode {
         use std::io::Write as _;
 
-        // Monitor stdin: when the parent (automata-client) exits its pipe closes,
+        // Monitor stdin: when the parent (MCP client) exits its pipe closes,
         // triggering an EOF here. We set CANCEL so the workflow stops cleanly.
         std::thread::spawn(|| {
-            use std::io::Read as _;
-            let mut buf = [0u8; 1];
-            loop {
-                match std::io::stdin().read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {}
-                }
-            }
-            CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+            run_stdin_cancel_monitor(std::io::stdin(), &CANCEL);
         });
 
         let cancel_flag = Some(&CANCEL as &std::sync::atomic::AtomicBool);
@@ -275,6 +267,9 @@ fn main() {
         };
         println!("{terminal_json}");
         let _ = std::io::stdout().flush();
+        if terminal_json.contains("\"Failed\"") {
+            std::process::exit(1);
+        }
     } else {
         // Interactive mode: no JSON output, errors go to log.
         match workflow.run(&mut executor, None, None) {
@@ -287,6 +282,55 @@ fn main() {
                 std::process::exit(1);
             }
         }
+    }
+}
+
+/// Reads from `reader` until EOF, then sets `cancel`.
+/// If the very first read returns EOF (no parent attached), exits without cancelling —
+/// this allows pipe-mode runs without an MCP parent holding stdin open.
+fn run_stdin_cancel_monitor<R: std::io::Read>(
+    mut reader: R,
+    cancel: &std::sync::atomic::AtomicBool,
+) {
+    let mut buf = [0u8; 1];
+    // First read: immediate EOF means no parent — don't cancel.
+    match reader.read(&mut buf) {
+        Ok(0) | Err(_) => return,
+        Ok(_) => {}
+    }
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+    }
+    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use super::run_stdin_cancel_monitor;
+
+    #[test]
+    fn immediate_eof_does_not_cancel() {
+        let cancel = AtomicBool::new(false);
+        run_stdin_cancel_monitor(std::io::empty(), &cancel);
+        assert!(!cancel.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn data_then_eof_cancels() {
+        let cancel = AtomicBool::new(false);
+        run_stdin_cancel_monitor(std::io::Cursor::new(b"x"), &cancel);
+        assert!(cancel.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn multiple_bytes_then_eof_cancels() {
+        let cancel = AtomicBool::new(false);
+        run_stdin_cancel_monitor(std::io::Cursor::new(b"hello"), &cancel);
+        assert!(cancel.load(Ordering::Relaxed));
     }
 }
 
